@@ -1,0 +1,718 @@
+@import 'reactflow/dist/style.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    --dot-color: #e5e5e5;
+    --alert-red: #D90429;
+  }
+
+  html.dark {
+    --dot-color: #1e1e1e;
+    --alert-red: #E8475C;
+  }
+
+  /* Dark default border color — overrides Tailwind preflight for border-2 etc.
+     without a color class. Tailwind utilities in @layer utilities still win. */
+  html.dark *,
+  html.dark ::before,
+  html.dark ::after {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  body {
+    @apply bg-white text-carbon;
+  }
+
+  html.dark body {
+    background: #0a0a0a;
+    color: #ececec;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  * {
+    border-color: rgba(26, 26, 26, 0.08);
+  }
+
+  html.dark * {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(26, 26, 26, 0.05);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(26, 26, 26, 0.2);
+    border-radius: 0;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(26, 26, 26, 0.35);
+  }
+
+  html.dark ::-webkit-scrollbar-track {
+    background: #0a0a0a;
+  }
+
+  html.dark ::-webkit-scrollbar-thumb {
+    background: #2a2a2a;
+    border-radius: 0;
+  }
+
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    background: #444444;
+  }
+}
+
+@layer components {
+  /* Dot grid background */
+  .bg-dots {
+    background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* ── Soft elevation cards ── */
+  .card {
+    @apply bg-white rounded-2xl transition-all duration-200;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 6px 24px rgba(0,0,0,0.06);
+  }
+
+  .card:hover {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06), 0 10px 36px rgba(0,0,0,0.1);
+  }
+
+  .card-sm {
+    @apply bg-white rounded-xl transition-all duration-200;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 4px 16px rgba(0,0,0,0.05);
+  }
+
+  .card-sm:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.08);
+  }
+
+  /* Dark mode cards */
+  :is(.dark .card) {
+    background-color: #161616;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 6px 24px rgba(0,0,0,0.3);
+  }
+
+  :is(.dark .card:hover) {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 10px 36px rgba(0,0,0,0.4);
+  }
+
+  :is(.dark .card-sm) {
+    background-color: #161616;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.25);
+  }
+
+  :is(.dark .card-sm:hover) {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.35);
+  }
+
+  /* ── Glass panels ── */
+  .glass {
+    background: #FAFAFA;
+    border-right: none;
+    box-shadow:
+      inset -1px 0 0 rgba(255,255,255,0.8),
+      2px 0 12px rgba(0,0,0,0.03),
+      6px 0 24px rgba(0,0,0,0.02);
+  }
+
+  :is(.dark .glass) {
+    background:
+      linear-gradient(180deg, #181818 0%, #131313 50%, #0F0F0F 100%);
+    border-right-color: rgba(255,255,255,0.06);
+    box-shadow:
+      inset -1px 0 0 rgba(255,255,255,0.04),
+      2px 0 16px rgba(0,0,0,0.4),
+      8px 0 32px rgba(0,0,0,0.2);
+  }
+
+  .glass-top {
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(26,26,26,0.06);
+  }
+
+  :is(.dark .glass-top) {
+    background: rgba(22,22,22,0.75);
+    border-bottom-color: rgba(255,255,255,0.06);
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    @apply px-4 py-2 font-display font-semibold text-sm rounded-full transition-all duration-150;
+  }
+
+  .btn-press {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .btn-press:hover {
+    transform: translate(1px, 1px);
+  }
+
+  .btn-press:active {
+    transform: translate(2px, 2px);
+  }
+
+  .btn-primary {
+    @apply bg-carbon text-white;
+  }
+
+  .btn-primary:hover {
+    @apply bg-alert-red;
+  }
+
+  :is(.dark .btn-primary) {
+    background-color: #ececec;
+    color: #0a0a0a;
+  }
+
+  :is(.dark .btn-primary:hover) {
+    @apply bg-alert-red text-white;
+  }
+
+  .btn-secondary {
+    @apply bg-carbon/[0.06] text-carbon;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-carbon/[0.12];
+  }
+
+  :is(.dark .btn-secondary) {
+    background-color: rgba(236, 236, 236, 0.08);
+    color: #ececec;
+  }
+
+  :is(.dark .btn-secondary:hover) {
+    background-color: rgba(236, 236, 236, 0.14);
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-carbon/60;
+  }
+
+  .btn-ghost:hover {
+    @apply text-alert-red;
+  }
+
+  /* ── Input ── */
+  .input {
+    @apply bg-carbon/[0.03] border border-carbon/10 rounded-lg px-3 py-2 text-carbon font-mono text-sm
+           placeholder-carbon/30
+           focus:outline-none focus:border-carbon/25 focus:bg-white transition-colors;
+  }
+
+  .input-search {
+    @apply bg-carbon/[0.04] border-0 rounded-full px-4 py-2 text-carbon font-mono text-sm
+           placeholder-carbon/30
+           focus:outline-none focus:bg-carbon/[0.07] transition-colors;
+  }
+
+  :is(.dark .input) {
+    background-color: rgba(236, 236, 236, 0.05);
+    color: #ececec;
+    border-color: rgba(236, 236, 236, 0.1);
+  }
+
+  :is(.dark .input:focus) {
+    background-color: rgba(236, 236, 236, 0.08);
+    border-color: rgba(236, 236, 236, 0.2);
+  }
+
+  :is(.dark .input)::placeholder {
+    color: rgb(236 236 236 / 0.3);
+  }
+
+  :is(.dark .input-search) {
+    background-color: rgba(236, 236, 236, 0.05);
+    color: #ececec;
+  }
+
+  :is(.dark .input-search:focus) {
+    background-color: rgba(236, 236, 236, 0.08);
+  }
+
+  :is(.dark .input-search)::placeholder {
+    color: rgb(236 236 236 / 0.3);
+  }
+
+  /* ── Table rows ── */
+  .table-row {
+    @apply border-b-2 hover:bg-paper-dark transition-colors;
+  }
+
+  html.dark .table-row:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+  }
+
+  /* ── Severity badges — soft pill, no border ── */
+  .badge {
+    @apply px-2.5 py-0.5 text-xs font-display font-bold uppercase rounded-full border-0;
+  }
+
+  .badge-critical {
+    background-color: rgba(217, 4, 41, 0.12);
+    color: #D90429;
+  }
+
+  .badge-high {
+    background-color: rgba(196, 81, 108, 0.10);
+    color: #9F1239;
+  }
+
+  .badge-medium {
+    background-color: rgba(139, 139, 139, 0.12);
+    color: #525252;
+  }
+
+  .badge-low {
+    background-color: rgba(200, 200, 200, 0.25);
+    color: #A3A3A3;
+  }
+
+  .badge-info {
+    background-color: rgba(200, 200, 200, 0.15);
+    color: #A3A3A3;
+  }
+
+  /* Dark mode — monochrome badges */
+  :is(.dark .badge-critical) {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+  }
+
+  :is(.dark .badge-high) {
+    background-color: rgba(255, 255, 255, 0.09);
+    color: #d4d4d4;
+  }
+
+  :is(.dark .badge-medium) {
+    background-color: rgba(255, 255, 255, 0.07);
+    color: #a0a0a0;
+  }
+
+  :is(.dark .badge-low) {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #777777;
+  }
+
+  :is(.dark .badge-info) {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: #666666;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-carbon to-carbon-light bg-clip-text text-transparent;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DARK MODE — unlayered overrides (beat Tailwind @layer utilities)
+   dark-site-2 "Deep Black" palette
+   bg:#0a0a0a  card:#161616  border:#2a2a2a  shadow:#333333
+   text:#ececec  text-dim:#777777  dot:#1e1e1e  red:#D90429
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Surfaces ── */
+html.dark .bg-white {
+  background-color: #161616;
+}
+
+html.dark .bg-white\/90 {
+  background-color: rgb(22 22 22 / 0.9);
+}
+
+html.dark .bg-paper {
+  background-color: #0a0a0a;
+}
+
+html.dark .bg-paper-dark {
+  background-color: #111111;
+}
+
+html.dark .hover\:bg-paper-dark:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+html.dark .bg-carbon {
+  background-color: #ececec;
+}
+
+/* ── Text ── */
+html.dark .text-carbon {
+  color: #ececec;
+}
+
+html.dark .text-carbon\/70 {
+  color: rgb(236 236 236 / 0.7);
+}
+
+html.dark .text-carbon\/60 {
+  color: rgb(236 236 236 / 0.6);
+}
+
+html.dark .text-carbon\/50 {
+  color: rgb(236 236 236 / 0.5);
+}
+
+html.dark .text-carbon\/40 {
+  color: rgb(236 236 236 / 0.4);
+}
+
+html.dark .text-carbon\/30 {
+  color: rgb(236 236 236 / 0.3);
+}
+
+html.dark .text-carbon\/20 {
+  color: rgb(236 236 236 / 0.2);
+}
+
+html.dark .placeholder-carbon\/30::placeholder {
+  color: rgb(236 236 236 / 0.3);
+}
+
+html.dark .text-paper {
+  color: #ececec;
+}
+
+/* ── Borders ── */
+html.dark .border-carbon {
+  border-color: #2a2a2a;
+}
+
+html.dark .border-carbon\/10 {
+  border-color: rgb(42 42 42 / 0.3);
+}
+
+html.dark .border-carbon\/20 {
+  border-color: rgb(42 42 42 / 0.5);
+}
+
+html.dark .border-carbon\/30 {
+  border-color: rgb(42 42 42 / 0.7);
+}
+
+html.dark .hover\:border-carbon:hover {
+  border-color: #2a2a2a;
+}
+
+/* ── Background opacity ── */
+html.dark .bg-carbon\/10 {
+  background-color: rgb(236 236 236 / 0.08);
+}
+
+html.dark .bg-carbon\/20 {
+  background-color: rgb(236 236 236 / 0.12);
+}
+
+html.dark .bg-carbon\/40 {
+  background-color: rgb(0 0 0 / 0.6);
+}
+
+html.dark .bg-carbon\/\[0\.02\] {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+html.dark .bg-carbon\/\[0\.03\] {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+html.dark .bg-carbon\/\[0\.04\] {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+html.dark .hover\:bg-carbon\/\[0\.02\]:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Active pill inversion ── */
+html.dark button.bg-carbon[class*="text-white"],
+html.dark a.bg-carbon[class*="text-white"] {
+  background-color: #ececec;
+  color: #0a0a0a;
+}
+
+html.dark button.bg-carbon[class*="text-white"][class*="border-carbon"],
+html.dark a.bg-carbon[class*="text-white"][class*="border-carbon"] {
+  border-color: #ececec;
+}
+
+/* ── Green status colors (SessionCard) ── */
+html.dark .bg-green-50 {
+  background-color: rgba(34, 197, 94, 0.1);
+}
+
+html.dark .border-green-200 {
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+html.dark .text-green-600 {
+  color: #4ade80;
+}
+
+html.dark .text-green-500 {
+  color: #4ade80;
+}
+
+html.dark .bg-green-600 {
+  background-color: #16a34a;
+}
+
+/* ── Severity color overrides ── */
+html.dark .bg-severity-critical\/\[0\.04\] {
+  background-color: rgba(220, 38, 38, 0.08);
+}
+
+html.dark .bg-severity-high\/\[0\.04\] {
+  background-color: rgba(234, 88, 12, 0.08);
+}
+
+html.dark .bg-severity-medium\/\[0\.04\] {
+  background-color: rgba(202, 138, 4, 0.08);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   React Flow — editorial brutalist style
+   ═══════════════════════════════════════════════════════════════════ */
+.react-flow {
+  --xy-background-color: transparent;
+}
+
+.react-flow__node {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.react-flow__controls {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.08) !important;
+  border: none !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background-color: rgba(255,255,255,0.85) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-color: rgba(26,26,26,0.06) !important;
+  border-width: 0 0 1px 0 !important;
+  fill: #1A1A1A !important;
+  border-radius: 0 !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom-width: 0 !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: rgba(26,26,26,0.06) !important;
+  fill: #D90429 !important;
+}
+
+.react-flow__minimap {
+  background-color: rgba(255,255,255,0.85) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: none !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.08);
+  border-radius: 12px !important;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+.react-flow__edge-text {
+  fill: #1A1A1A;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.react-flow__node.selected {
+  outline: 2px solid #D90429;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* React Flow dark */
+html.dark .react-flow__controls {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.3) !important;
+}
+
+html.dark .react-flow__controls-button {
+  background-color: rgba(22,22,22,0.85) !important;
+  border-color: rgba(255,255,255,0.06) !important;
+  fill: #ececec !important;
+}
+
+html.dark .react-flow__controls-button:hover {
+  background-color: rgba(255,255,255,0.1) !important;
+  fill: #D90429 !important;
+}
+
+html.dark .react-flow__minimap {
+  background-color: rgba(22,22,22,0.85) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.3);
+}
+
+html.dark .react-flow__edge-text {
+  fill: #ececec;
+}
+
+/* ── Graph node inline overrides ── */
+html.dark .shadow-\[3px_3px_0px_\#1A1A1A\] {
+  box-shadow: 3px 3px 0px #333333;
+}
+
+html.dark .shadow-\[4px_4px_0px_\#1A1A1A\] {
+  box-shadow: 4px 4px 0px #333333;
+}
+
+html.dark .hover\:shadow-\[3px_3px_0px_\#1A1A1A\]:hover {
+  box-shadow: 3px 3px 0px #333333;
+}
+
+html.dark .hover\:shadow-\[4px_4px_0px_\#1A1A1A\]:hover {
+  box-shadow: 4px 4px 0px #333333;
+}
+
+html.dark .border-\[\#1A1A1A\] {
+  border-color: #2a2a2a;
+}
+
+html.dark .hover\:border-\[\#1A1A1A\]:hover {
+  border-color: #2a2a2a;
+}
+
+html.dark .shadow-\[2px_2px_0px_\#8B8B8B\] {
+  box-shadow: 2px 2px 0px #333333;
+}
+
+html.dark .shadow-\[3px_3px_0px_\#8B8B8B\] {
+  box-shadow: 3px 3px 0px #333333;
+}
+
+html.dark .shadow-\[3px_3px_0px_\#C8C8C8\] {
+  box-shadow: 3px 3px 0px #333333;
+}
+
+html.dark .shadow-\[3px_3px_0px_\#C4516C\] {
+  box-shadow: 3px 3px 0px rgba(196, 81, 108, 0.4);
+}
+
+html.dark .shadow-\[3px_3px_0px_\#D90429\] {
+  box-shadow: 3px 3px 0px #D90429;
+}
+
+html.dark .shadow-\[4px_4px_0px_\#D90429\] {
+  box-shadow: 4px 4px 0px #D90429;
+}
+
+html.dark .hover\:shadow-\[3px_3px_0px_\#D90429\]:hover {
+  box-shadow: 3px 3px 0px #D90429;
+}
+
+html.dark .hover\:shadow-\[4px_4px_0px_\#D90429\]:hover {
+  box-shadow: 4px 4px 0px #D90429;
+}
+
+html.dark .shadow-\[8px_8px_0px_\#1A1A1A\] {
+  box-shadow: 8px 8px 0px #333333;
+}
+
+/* ── Graph node background overrides ── */
+html.dark .bg-\[\#FDF2F4\] {
+  background-color: rgba(217, 4, 41, 0.12);
+}
+
+html.dark .bg-\[\#F4F4F4\] {
+  background-color: #1e1e1e;
+}
+
+html.dark .bg-\[\#FAFAF8\] {
+  background-color: #161616;
+}
+
+html.dark .bg-\[\#FAFAFA\] {
+  background-color: #161616;
+}
+
+/* ToolNode medium risk — #1A1A1A bg invisible on dark, lighten */
+html.dark .bg-\[\#1A1A1A\] {
+  background-color: #333333;
+}
+
+/* ── Graph node border overrides ── */
+html.dark .border-\[\#8B8B8B\] {
+  border-color: #3a3a3a;
+}
+
+html.dark .border-\[\#C8C8C8\] {
+  border-color: #2a2a2a;
+}
+
+html.dark .border-\[\#C4516C\] {
+  border-color: rgba(196, 81, 108, 0.5);
+}
+
+/* ── Graph node text overrides ── */
+html.dark .text-\[\#525252\] {
+  color: #a0a0a0;
+}
+
+html.dark .text-\[\#9F1239\] {
+  color: #ff6b6b;
+}
+
+html.dark .text-\[\#8B8B8B\] {
+  color: #777777;
+}
+
+html.dark .text-\[\#C4516C\] {
+  color: #e07090;
+}
+
+/* ── Dividers ── */
+html.dark .divide-y > :not([hidden]) ~ :not([hidden]) {
+  border-color: #2a2a2a;
+}
+
+html.dark .border-t {
+  border-color: #2a2a2a;
+}
+
+html.dark .border-b {
+  border-color: #2a2a2a;
+}
+
+html.dark .border-b-2 {
+  border-color: #2a2a2a;
+}
+
+html.dark .border-r-2 {
+  border-color: #2a2a2a;
+}

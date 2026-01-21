@@ -1,0 +1,495 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "name": "AgentsLeak Default Detection Rules",
+    "description": "Built-in detection rules for identifying malicious AI agent behavior",
+    "author": "AgentsLeak Security Team",
+    "last_updated": "2025-01-15"
+  },
+  "rules": [
+    {
+      "id": "SENS-001",
+      "name": "Sensitive file access",
+      "description": "Detects read access to sensitive configuration files that may contain secrets, API keys, or credentials. Includes .env files, credential files, and cryptographic key files.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "file_read",
+          "metadata.file_path": {
+            "regex": ".*(\\.env|\\.env\\.[a-zA-Z0-9_]+|credentials\\.[a-zA-Z0-9_]+|secrets\\.[a-zA-Z0-9_]+|\\.pem|\\.key|secret_key|api_key|apikey)$"
+          }
+        }
+      },
+      "tags": ["credentials", "secrets", "sensitive-data"]
+    },
+    {
+      "id": "SENS-002",
+      "name": "SSH key access",
+      "description": "Detects read or write access to SSH private keys, configuration, and known_hosts files. SSH keys provide authentication to remote systems and are high-value targets.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": ["file_read", "file_write"]
+          },
+          "metadata.file_path": {
+            "regex": ".*\\.ssh/(id_[a-zA-Z0-9_]+|id_[a-zA-Z0-9_]+\\.pub|config|known_hosts|authorized_keys)$"
+          }
+        }
+      },
+      "tags": ["ssh", "authentication", "credentials"]
+    },
+    {
+      "id": "SENS-003",
+      "name": "Git credentials access",
+      "description": "Detects read access to Git credential storage files including .git-credentials, .netrc, and .gitconfig files that may contain authentication tokens or passwords.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "file_read",
+          "metadata.file_path": {
+            "regex": ".*((\\.git-credentials|\\.netrc|\\.gitconfig)|(/\\.config/git/credentials))$"
+          }
+        }
+      },
+      "tags": ["git", "credentials", "version-control"]
+    },
+    {
+      "id": "EXFIL-001",
+      "name": "Data exfiltration pattern",
+      "description": "Detects potential data exfiltration by identifying a sequence where a sensitive file is read followed by network access within 5 minutes. This pattern is commonly used to steal credentials or secrets.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "block",
+      "conditions": {
+        "type": "sequence",
+        "window_seconds": 300,
+        "steps": [
+          {
+            "category": "file_read",
+            "metadata.file_path": {
+              "regex": ".*(\\.env|\\.env\\.[a-zA-Z0-9_]+|\\.pem|\\.key|credentials|secrets|password|api_key|\\.ssh/id_)"
+            }
+          },
+          {
+            "category": "network_access"
+          }
+        ]
+      },
+      "block_message": "Blocked: Potential data exfiltration detected. A sensitive file was read followed by network access. This pattern may indicate an attempt to steal credentials or secrets.",
+      "tags": ["exfiltration", "data-theft", "network"]
+    },
+    {
+      "id": "EXFIL-002",
+      "name": "Curl POST with file data",
+      "description": "Detects curl commands that POST file contents to external servers using -d @file, --data @file, or -F syntax. This is a common technique for exfiltrating file contents.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "curl\\s+.*(-d\\s*@|--data\\s*@|--data-binary\\s*@|-F\\s+['\"]?[a-zA-Z0-9_]+=@)"
+          }
+        }
+      },
+      "tags": ["exfiltration", "curl", "http"]
+    },
+    {
+      "id": "RSHELL-001",
+      "name": "Reverse shell attempt",
+      "description": "Detects common reverse shell patterns including bash -i redirects, /dev/tcp socket connections, and Python socket-based reverse shells. These are used to establish unauthorized remote access.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "block",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "(bash\\s+-i\\s*>|/dev/tcp/|python[23]?\\s+.*socket.*connect|perl\\s+.*socket.*connect|ruby\\s+.*TCPSocket|php\\s+.*fsockopen)"
+          }
+        }
+      },
+      "block_message": "Blocked: Reverse shell attempt detected. The command contains patterns commonly used to establish unauthorized remote access to the system.",
+      "tags": ["reverse-shell", "remote-access", "backdoor"]
+    },
+    {
+      "id": "RSHELL-002",
+      "name": "Netcat with execute",
+      "description": "Detects netcat (nc/ncat) commands with execute flags that can spawn shells. This is a classic technique for creating backdoors and reverse shells.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "block",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "(nc|ncat|netcat)\\s+.*(-e\\s+|--exec\\s+|-c\\s+|--sh-exec\\s+)"
+          }
+        }
+      },
+      "block_message": "Blocked: Netcat command with execute option detected. This pattern is commonly used to create backdoors or reverse shells.",
+      "tags": ["reverse-shell", "netcat", "backdoor"]
+    },
+    {
+      "id": "EXEC-001",
+      "name": "Download and execute",
+      "description": "Detects a dangerous pattern where a file is downloaded (via curl, wget, or similar) and then executed within a short time window. This is a common attack technique for deploying malware.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "block",
+      "conditions": {
+        "type": "sequence",
+        "window_seconds": 120,
+        "steps": [
+          {
+            "category": "bash_command",
+            "metadata.command": {
+              "regex": "(curl|wget|fetch)\\s+.*-o\\s+|>(\\s*[a-zA-Z0-9_/.-]+\\.sh)"
+            }
+          },
+          {
+            "category": "bash_command",
+            "metadata.command": {
+              "regex": "(bash|sh|python[23]?|perl|ruby|chmod\\s+\\+x)\\s+[a-zA-Z0-9_/.-]+"
+            }
+          }
+        ]
+      },
+      "block_message": "Blocked: Download and execute pattern detected. A file was downloaded and then executed, which is a common malware deployment technique.",
+      "tags": ["download-execute", "malware", "remote-code"]
+    },
+    {
+      "id": "EXEC-003",
+      "name": "Pipe to shell interpreter",
+      "description": "Detects commands where the output of curl/wget is piped directly into a shell interpreter (bash, sh, python, etc.). This is a common technique used in README install instructions that bypasses file inspection, allowing arbitrary remote code execution.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "block",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "(curl|wget)\\s+.*\\|\\s*(bash|sh|zsh|python[23]?|perl|ruby|node)"
+          }
+        }
+      },
+      "block_message": "Blocked: Pipe-to-shell pattern detected. The command downloads content and pipes it directly to a shell interpreter, enabling arbitrary remote code execution without inspection.",
+      "tags": ["pipe-to-shell", "download-execute", "remote-code"]
+    },
+    {
+      "id": "EXEC-002",
+      "name": "Suspicious script download",
+      "description": "Detects downloads of shell scripts from common code-sharing platforms that are often used to host malicious payloads, including raw GitHub URLs and pastebin services.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": ["web_fetch", "bash_command"]
+          },
+          "metadata": {
+            "any_match": [
+              {
+                "url": {
+                  "regex": "(raw\\.githubusercontent\\.com|gist\\.githubusercontent\\.com|pastebin\\.com|paste\\.ee|hastebin\\.com|ghostbin\\.).*\\.(sh|py|pl|rb|ps1)($|\\?)"
+                }
+              },
+              {
+                "command": {
+                  "regex": "(curl|wget)\\s+.*(raw\\.githubusercontent\\.com|pastebin\\.com/raw|paste\\.ee/r).*\\.(sh|py|pl)"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "tags": ["script-download", "suspicious-url", "remote-code"]
+    },
+    {
+      "id": "PRIV-001",
+      "name": "Privilege escalation",
+      "description": "Detects commands commonly used for privilege escalation including sudo, setting SUID bits, changing ownership to root, or setting overly permissive file modes.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "(sudo\\s+|chmod\\s+777\\s+|chmod\\s+\\+s\\s+|chmod\\s+[0-7]*[4-7][0-7]{2}\\s+/|chown\\s+root|setuid|setgid)"
+          }
+        }
+      },
+      "tags": ["privilege-escalation", "sudo", "permissions"]
+    },
+    {
+      "id": "PRIV-002",
+      "name": "System modification",
+      "description": "Detects write operations to critical system directories including /etc, /usr, systemd unit files, and cron directories. Such modifications could compromise system integrity.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "file_write",
+          "metadata.file_path": {
+            "regex": "^(/etc/|/usr/|/lib/systemd/|/var/spool/cron/|/etc/cron\\.|/etc/systemd/)"
+          }
+        }
+      },
+      "tags": ["system-modification", "persistence", "configuration"]
+    },
+    {
+      "id": "SCOPE-001",
+      "name": "Out of project file access",
+      "description": "Detects file read or write operations outside of the session's designated working directory. AI agents should typically operate within their project scope.",
+      "enabled": true,
+      "severity": "low",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": ["file_read", "file_write"]
+          },
+          "metadata.file_path": {
+            "not_within": "{{session.cwd}}"
+          }
+        }
+      },
+      "context_required": ["session.cwd"],
+      "tags": ["scope-violation", "boundary", "project-escape"]
+    },
+    {
+      "id": "SCOPE-002",
+      "name": "System directory access",
+      "description": "Detects read access to sensitive system files and directories including /etc/passwd, /etc/shadow, and /proc filesystem which may be used for reconnaissance.",
+      "enabled": true,
+      "severity": "medium",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "file_read",
+          "metadata.file_path": {
+            "regex": "^(/etc/(passwd|shadow|sudoers|hosts|group)|/proc/[0-9]+/(environ|cmdline|maps|fd)|/proc/(version|cpuinfo|meminfo))"
+          }
+        }
+      },
+      "tags": ["reconnaissance", "system-info", "enumeration"]
+    },
+    {
+      "id": "ENUM-001",
+      "name": "Mass file enumeration",
+      "description": "Detects rapid file reading that may indicate automated scanning or enumeration. More than 50 file read operations within 60 seconds triggers this rule.",
+      "enabled": true,
+      "severity": "low",
+      "action": "alert",
+      "conditions": {
+        "type": "threshold",
+        "event": {
+          "category": "file_read"
+        },
+        "threshold": 50,
+        "window_seconds": 60,
+        "group_by": "session.id"
+      },
+      "tags": ["enumeration", "scanning", "reconnaissance"]
+    },
+    {
+      "id": "ENUM-002",
+      "name": "Credential file scanning",
+      "description": "Detects search operations (grep/glob) looking for files or content containing password, secret, api_key, or token patterns. This may indicate credential harvesting attempts.",
+      "enabled": true,
+      "severity": "medium",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": ["grep_search", "glob_search"]
+          },
+          "metadata": {
+            "any_match": [
+              {
+                "pattern": {
+                  "regex": "(password|passwd|secret|api[_-]?key|apikey|token|bearer|auth|credential|private[_-]?key)"
+                }
+              },
+              {
+                "search_pattern": {
+                  "regex": "\\*\\.(env|pem|key|secret|credential)"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "tags": ["credential-scan", "enumeration", "secrets"]
+    },
+    {
+      "id": "EVASION-001",
+      "name": "Base64-encoded sensitive file exfiltration",
+      "description": "Detects base64 encoding of sensitive files (.env, .pem, .key, credentials) which is commonly used to evade content-based detection before exfiltrating data.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "(base64|openssl\\s+(enc|base64)|xxd)\\s+.*(\\.env|\\.pem|\\.key|credentials|secrets|password|\\.ssh/id_)"
+          }
+        }
+      },
+      "tags": ["evasion", "base64", "encoding", "exfiltration"]
+    },
+    {
+      "id": "EVASION-002",
+      "name": "One-liner network access via interpreter",
+      "description": "Detects python/node/ruby/perl one-liner commands that perform network operations. Agents may use these to bypass detection of curl/wget.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "(python[23]?|node|ruby|perl)\\s+-[ce]\\s+.*(requests|urllib|http\\.client|urlopen|fetch\\(|Net::HTTP|TCPSocket|IO::Socket|LWP)"
+          }
+        }
+      },
+      "tags": ["evasion", "one-liner", "interpreter", "network"]
+    },
+    {
+      "id": "EVASION-003",
+      "name": "Eval or command substitution evasion",
+      "description": "Detects use of eval, command substitution $(), or backtick execution to obfuscate network access or file operations.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "(eval\\s+.*\\$\\(|eval\\s+.*`|\\$\\(.*curl|\\$\\(.*wget|`.*curl|`.*wget|eval\\s+.*\\\\x)"
+          }
+        }
+      },
+      "tags": ["evasion", "obfuscation", "eval", "command-substitution"]
+    },
+    {
+      "id": "EVASION-004",
+      "name": "DNS or ICMP data exfiltration",
+      "description": "Detects potential DNS-based or ICMP-based data exfiltration using dig, nslookup, or ping with encoded data payloads.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "bash_command",
+          "metadata.command": {
+            "regex": "(dig\\s+.*\\$\\(|nslookup\\s+.*\\$\\(|ping\\s+-[cp]\\s+.*\\$\\(|dig\\s+TXT|xxd.*\\|.*dig)"
+          }
+        }
+      },
+      "tags": ["evasion", "dns-exfil", "covert-channel"]
+    }
+  ],
+  "rule_categories": {
+    "SENS": {
+      "name": "Sensitive File Access",
+      "description": "Rules detecting access to files containing sensitive information"
+    },
+    "EXFIL": {
+      "name": "Exfiltration",
+      "description": "Rules detecting attempts to exfiltrate data from the system"
+    },
+    "RSHELL": {
+      "name": "Reverse Shell",
+      "description": "Rules detecting reverse shell and backdoor attempts"
+    },
+    "EXEC": {
+      "name": "Execution",
+      "description": "Rules detecting suspicious code download and execution patterns"
+    },
+    "PRIV": {
+      "name": "Privilege",
+      "description": "Rules detecting privilege escalation and system modification attempts"
+    },
+    "SCOPE": {
+      "name": "Scope",
+      "description": "Rules detecting operations outside permitted boundaries"
+    },
+    "ENUM": {
+      "name": "Enumeration",
+      "description": "Rules detecting reconnaissance and scanning activities"
+    },
+    "EVASION": {
+      "name": "Evasion",
+      "description": "Rules detecting attempts to bypass security controls using encoding, obfuscation, or alternative tools"
+    }
+  },
+  "severity_levels": {
+    "critical": {
+      "priority": 1,
+      "description": "Immediate threat requiring instant response",
+      "default_action": "block"
+    },
+    "high": {
+      "priority": 2,
+      "description": "Significant security concern requiring prompt attention",
+      "default_action": "alert"
+    },
+    "medium": {
+      "priority": 3,
+      "description": "Potential security issue requiring investigation",
+      "default_action": "alert"
+    },
+    "low": {
+      "priority": 4,
+      "description": "Informational finding for monitoring purposes",
+      "default_action": "log"
+    }
+  },
+  "actions": {
+    "block": {
+      "description": "Immediately block the operation and log the event",
+      "halt_execution": true,
+      "notify": true
+    },
+    "alert": {
+      "description": "Allow the operation but generate an alert for review",
+      "halt_execution": false,
+      "notify": true
+    },
+    "log": {
+      "description": "Allow the operation and log for audit purposes",
+      "halt_execution": false,
+      "notify": false
+    }
+  }
+}

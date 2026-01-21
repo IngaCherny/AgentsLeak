@@ -1,0 +1,22 @@
+# AgentsLeak Endpoint Configuration
+# Copy to ~/.agentsleak/config and edit as needed.
+#
+# All settings can also be set via environment variables.
+# Priority: environment variable > config file > default
+
+# ── Server ────────────────────────────────────────────────────────────
+# URL of the central AgentsLeak server.
+# Default: http://localhost:3827
+# AGENTSLEAK_SERVER="https://security.internal:3827"
+
+# ── Authentication ────────────────────────────────────────────────────
+# API key for authenticating with the server.
+# Must match the server's AGENTSLEAK_API_KEY environment variable.
+# If not set, no authentication header is sent.
+# AGENTSLEAK_API_KEY="your-secret-key-here"
+
+# ── Endpoint Identity ─────────────────────────────────────────────────
+# How this machine identifies itself to the server.
+# Auto-detected from hostname/whoami if not set.
+# AGENTSLEAK_HOSTNAME="alice-macbook"
+# AGENTSLEAK_USER="alice"
