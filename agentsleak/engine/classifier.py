@@ -142,6 +142,13 @@ def classify_event(event: Event) -> EventCategory:
     """
     tool_name = event.tool_name
 
+    # MCP tools follow the naming pattern mcp__<server>__<tool>.
+    # Catch them before TOOL_CATEGORY_MAP / tool_input shape detection,
+    # otherwise an MCP tool whose input has `file_path` or `command` would
+    # be miscategorized as FILE_READ or COMMAND_EXEC and lose MCP attribution.
+    if tool_name and tool_name.startswith("mcp__"):
+        return EventCategory.MCP_TOOL_USE
+
     # Direct tool mapping
     if tool_name and tool_name in TOOL_CATEGORY_MAP:
         return TOOL_CATEGORY_MAP[tool_name]

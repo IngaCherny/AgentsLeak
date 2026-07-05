@@ -4,10 +4,8 @@ import {
   Download,
   RefreshCw,
   Clock,
-  Search,
   X,
   Map,
-  Maximize2,
   ChevronDown,
   ChevronRight,
   Activity,
@@ -16,6 +14,7 @@ import {
   Monitor,
   Cpu,
 } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import { cn } from '@/lib/utils';
 import { useDarkMode } from '@/lib/useDarkMode';
 import { SessionGraph, GlobalGraph, TimeRange } from '@/components/graph';
@@ -37,8 +36,6 @@ export default function Graph() {
   const [selectedSession, setSelectedSession] = useState<string>('');
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [showMinimap, setShowMinimap] = useState(true);
   const [showLegend, setShowLegend] = useState(false);
   const [endpointFilter, setEndpointFilter] = useState<string>('all');
@@ -61,51 +58,29 @@ export default function Graph() {
     setRefreshKey((k) => k + 1);
   };
 
-  const handleExport = useCallback(() => {
+  // Rasterise the React Flow pane to a PNG (nodes are HTML, so the whole
+  // pane is snapshotted; the minimap/controls overlays are filtered out).
+  const handleExport = useCallback(async () => {
     const container = graphContainerRef.current;
     if (!container) return;
-
-    // Export the graph SVG element
-    const svgEl = container.querySelector('.react-flow__viewport');
-    if (svgEl) {
-      // Clone the SVG parent and serialize
-      const svgRoot = container.querySelector('svg.react-flow__edges');
-      if (svgRoot) {
-        const clone = svgRoot.cloneNode(true) as SVGElement;
-        const serializer = new XMLSerializer();
-        const svgString = serializer.serializeToString(clone);
-        const blob = new Blob([svgString], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `agentsleak-graph-${new Date().toISOString().slice(0, 19)}.svg`;
-        a.click();
-        URL.revokeObjectURL(url);
-        return;
-      }
+    const pane = container.querySelector<HTMLElement>('.react-flow') ?? container;
+    const isDark = document.documentElement.classList.contains('dark');
+    try {
+      const dataUrl = await toPng(pane, {
+        pixelRatio: 2,
+        backgroundColor: isDark ? '#111111' : '#F0F0F0',
+        filter: (node) =>
+          !(node instanceof HTMLElement &&
+            (node.classList?.contains('react-flow__minimap') ||
+             node.classList?.contains('react-flow__controls'))),
+      });
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `agentsleak-graph-${new Date().toISOString().slice(0, 19)}.png`;
+      a.click();
+    } catch (err) {
+      console.error('Graph export failed:', err);
     }
-
-    // Fallback: export graph metadata as JSON
-    const data = {
-      viewMode,
-      selectedSession,
-      timeRange,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `agentsleak-graph-${new Date().toISOString().slice(0, 19)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [viewMode, selectedSession, timeRange]);
-
-  const toggleSearch = useCallback(() => {
-    setShowSearch((s) => {
-      if (s) setSearchQuery('');
-      return !s;
-    });
   }, []);
 
   // Get selected session data for stats bar
@@ -257,7 +232,7 @@ export default function Graph() {
               <div className="flex items-center gap-1.5">
                 <span className={cn(
                   'w-1.5 h-1.5 rounded-full',
-                  selectedSessionData.status === 'active' ? 'bg-green-500 animate-pulse' : 'bg-carbon/30'
+                  selectedSessionData.status === 'active' ? 'bg-carbon/50 dark:bg-white/50 animate-pulse' : 'bg-carbon/30'
                 )} />
                 <span>{selectedSessionData.status}</span>
               </div>
@@ -266,45 +241,12 @@ export default function Graph() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Search */}
-          {showSearch && (
-            <div className="flex items-center bg-carbon/[0.04] rounded-full">
-              <Search className="w-4 h-4 opacity-40 ml-2.5" />
-              <input
-                type="text"
-                placeholder="Search nodes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="px-2 py-1.5 text-sm font-mono bg-transparent outline-none w-48"
-                autoFocus
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="mr-2 opacity-40 hover:text-alert-red">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          )}
-          <button
-            className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', showSearch ? 'bg-carbon text-white' : 'bg-carbon/[0.04] hover:bg-carbon/[0.08]')}
-            onClick={toggleSearch}
-            title="Search nodes"
-          >
-            <Search className="w-4 h-4" />
-          </button>
           <button
             className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', showMinimap ? 'bg-carbon text-white' : 'bg-carbon/[0.04] hover:bg-carbon/[0.08]')}
             onClick={() => setShowMinimap(!showMinimap)}
             title={showMinimap ? 'Hide minimap' : 'Show minimap'}
           >
             <Map className="w-4 h-4" />
-          </button>
-          <button
-            className="w-8 h-8 rounded-full bg-carbon/[0.04] hover:bg-carbon/[0.08] flex items-center justify-center transition-colors"
-            onClick={() => setRefreshKey((k) => k + 1)}
-            title="Fit to view"
-          >
-            <Maximize2 className="w-4 h-4" />
           </button>
           <button
             className="w-8 h-8 rounded-full bg-carbon/[0.04] hover:bg-carbon/[0.08] flex items-center justify-center transition-colors"
@@ -372,10 +314,10 @@ export default function Graph() {
             {!showLegend && (
               <div className="flex items-center gap-3 ml-2">
                 {[
-                  { color: 'bg-[#D90429]', label: 'Critical' },
-                  { color: 'bg-[#C4516C]', label: 'High' },
-                  { color: 'bg-[#1A1A1A]', label: 'Medium' },
-                  { color: 'bg-[#C8C8C8]', label: 'Low' },
+                  { color: 'bg-risk-critical', label: 'Critical' },
+                  { color: 'bg-risk-high', label: 'High' },
+                  { color: 'bg-risk-medium', label: 'Medium' },
+                  { color: 'bg-risk-low', label: 'Low' },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-1">
                     <span className={cn('w-2 h-2 rounded-full', item.color)} />
@@ -386,8 +328,8 @@ export default function Graph() {
             )}
           </div>
           {showLegend
-            ? <ChevronDown className="w-3.5 h-3.5 opacity-30" />
-            : <ChevronRight className="w-3.5 h-3.5 opacity-30" />
+            ? <ChevronDown className="w-3.5 h-3.5 opacity-40" />
+            : <ChevronRight className="w-3.5 h-3.5 opacity-40" />
           }
         </button>
         {showLegend && (
@@ -399,29 +341,29 @@ export default function Graph() {
               {[
                 {
                   level: 'CRITICAL',
-                  color: 'bg-[#D90429]',
-                  border: 'border-[#D90429]',
+                  color: 'bg-risk-critical',
+                  border: 'border-risk-critical',
                   tools: 'Bash, Task',
                   desc: 'Can execute arbitrary code',
                 },
                 {
                   level: 'HIGH',
-                  color: 'bg-[#C4516C]',
-                  border: 'border-[#C4516C]',
+                  color: 'bg-risk-high',
+                  border: 'border-risk-high',
                   tools: 'WebFetch, WebSearch',
                   desc: 'Can exfiltrate data over network',
                 },
                 {
                   level: 'MEDIUM',
-                  color: 'bg-[#1A1A1A]',
-                  border: 'border-[#1A1A1A]',
+                  color: 'bg-risk-medium',
+                  border: 'border-risk-medium',
                   tools: 'Write, Edit',
                   desc: 'Can mutate files on disk',
                 },
                 {
                   level: 'LOW',
-                  color: 'bg-[#F4F4F4] border border-[#C8C8C8]',
-                  border: 'border-[#C8C8C8]',
+                  color: 'bg-tint-neutral border border-risk-low',
+                  border: 'border-risk-low',
                   tools: 'Read, Glob, Grep',
                   desc: 'Read-only, minimal risk',
                 },
@@ -437,7 +379,7 @@ export default function Graph() {
               ))}
             </div>
             <div className="flex items-center gap-5 pt-2 border-t border-carbon/10">
-              <span className="text-[10px] font-display font-medium opacity-30 uppercase tracking-wider">Edges</span>
+              <span className="text-[10px] font-display font-medium opacity-40 uppercase tracking-wider">Edges</span>
               {[
                 { label: 'READ', color: isDark ? '#666666' : '#C8C8C8', dashed: true },
                 { label: 'WRITE', color: isDark ? '#a0a0a0' : '#1A1A1A', dashed: false },

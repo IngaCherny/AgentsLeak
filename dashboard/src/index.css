@@ -8,13 +8,45 @@
   html {
     @apply antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    /* Background pattern */
     --dot-color: #e5e5e5;
+    /* Single brand accent — used by alert-red Tailwind token */
     --alert-red: #D90429;
+    /* Brutal shadow palette (graph nodes) — value flips in dark mode */
+    --brutal: #1A1A1A;
+    --brutal-soft: #8B8B8B;
+    --brutal-softer: #C8C8C8;
+    --brutal-rose: #C4516C;
+    /* Mode-aware tinted surfaces (formerly inline #FDF2F4 / #F4F4F4 / #FAFAFA) */
+    --tint-critical: #FDF2F4;
+    --tint-neutral: #F4F4F4;
+    --tint-paper: #FAFAFA;
+    /* Mode-aware risk text — darker on light, lighter on dark */
+    --risk-high-deep: #9F1239;
+    --risk-medium-deep: #525252;
+    /* Severity ladder accents — RGB channels so Tailwind can apply alpha;
+       flip to the stealth-dark tones in dark mode */
+    --risk-critical: 217 4 41;
+    --risk-high: 196 81 108;
   }
 
   html.dark {
-    --dot-color: #1e1e1e;
-    --alert-red: #E8475C;
+    /* Dot grid — matched to ingacherny.com (#2a2a2a on near-black) */
+    --dot-color: #2a2a2a;
+    /* R5 — desaturated stealth red, reads as a tool not a toy on #0A0A0A */
+    --alert-red: #C8323D;
+    --brutal: #333333;
+    --brutal-soft: #2a2a2a;
+    --brutal-softer: #2a2a2a;
+    --brutal-rose: rgba(196, 81, 108, 0.4);
+    --tint-critical: rgba(200, 50, 61, 0.14);
+    --tint-neutral: #1e1e1e;
+    --tint-paper: #0C0C0C;
+    /* Rose, not coral — keeps "high" on the red ladder, never orange */
+    --risk-high-deep: #D06A82;
+    --risk-medium-deep: #a0a0a0;
+    --risk-critical: 200 50 61;
+    --risk-high: 208 106 130;
   }
 
   /* Dark default border color — overrides Tailwind preflight for border-2 etc.
@@ -108,23 +140,28 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.08);
   }
 
-  /* Dark mode cards */
+  /* Dark mode cards — stealth: near-black surface defined by a hairline,
+     not a glow. Border carries the edge; shadow only adds quiet depth. */
   :is(.dark .card) {
-    background-color: #161616;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 6px 24px rgba(0,0,0,0.3);
+    background-color: #0C0C0C;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5), 0 12px 30px rgba(0,0,0,0.5);
   }
 
   :is(.dark .card:hover) {
-    box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 10px 36px rgba(0,0,0,0.4);
+    border-color: rgba(255,255,255,0.18);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.55), 0 16px 38px rgba(0,0,0,0.55);
   }
 
   :is(.dark .card-sm) {
-    background-color: #161616;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.25);
+    background-color: #0C0C0C;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5), 0 6px 20px rgba(0,0,0,0.45);
   }
 
   :is(.dark .card-sm:hover) {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.35);
+    border-color: rgba(255,255,255,0.18);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.55), 0 10px 28px rgba(0,0,0,0.5);
   }
 
   /* ── Glass panels ── */
@@ -138,11 +175,9 @@
   }
 
   :is(.dark .glass) {
-    background:
-      linear-gradient(180deg, #181818 0%, #131313 50%, #0F0F0F 100%);
-    border-right-color: rgba(255,255,255,0.06);
+    background: #0C0C0C;
+    border-right-color: rgba(255,255,255,0.05);
     box-shadow:
-      inset -1px 0 0 rgba(255,255,255,0.04),
       2px 0 16px rgba(0,0,0,0.4),
       8px 0 32px rgba(0,0,0,0.2);
   }
@@ -155,8 +190,8 @@
   }
 
   :is(.dark .glass-top) {
-    background: rgba(22,22,22,0.75);
-    border-bottom-color: rgba(255,255,255,0.06);
+    background: rgba(12,12,12,0.75);
+    border-bottom-color: rgba(255,255,255,0.05);
   }
 
   /* ── Buttons ── */
@@ -333,18 +368,18 @@
 
 /* ═══════════════════════════════════════════════════════════════════
    DARK MODE — unlayered overrides (beat Tailwind @layer utilities)
-   dark-site-2 "Deep Black" palette
-   bg:#0a0a0a  card:#161616  border:#2a2a2a  shadow:#333333
-   text:#ececec  text-dim:#777777  dot:#1e1e1e  red:#D90429
+   "Stealth" palette — near-black, defined by hairlines not glow
+   bg:#0A0A0A  card:#0C0C0C  sidebar:#0C0C0C  border:rgba(255,255,255,.12)
+   text:#ececec  text-dim:#777777  dot:#2a2a2a  red:#C8323D
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Surfaces ── */
 html.dark .bg-white {
-  background-color: #161616;
+  background-color: #0C0C0C;
 }
 
 html.dark .bg-white\/90 {
-  background-color: rgb(22 22 22 / 0.9);
+  background-color: rgb(12 12 12 / 0.9);
 }
 
 html.dark .bg-paper {
@@ -400,25 +435,26 @@ html.dark .text-paper {
   color: #ececec;
 }
 
-/* ── Borders ── */
+/* ── Borders — T3 stealth: white hairlines, not dark-on-dark.
+   The hairline is what defines a card on the near-black field. ── */
 html.dark .border-carbon {
-  border-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.20);
 }
 
 html.dark .border-carbon\/10 {
-  border-color: rgb(42 42 42 / 0.3);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 html.dark .border-carbon\/20 {
-  border-color: rgb(42 42 42 / 0.5);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 html.dark .border-carbon\/30 {
-  border-color: rgb(42 42 42 / 0.7);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 html.dark .hover\:border-carbon:hover {
-  border-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.20);
 }
 
 /* ── Background opacity ── */
@@ -462,38 +498,17 @@ html.dark a.bg-carbon[class*="text-white"][class*="border-carbon"] {
   border-color: #ececec;
 }
 
-/* ── Green status colors (SessionCard) ── */
-html.dark .bg-green-50 {
-  background-color: rgba(34, 197, 94, 0.1);
-}
-
-html.dark .border-green-200 {
-  border-color: rgba(34, 197, 94, 0.25);
-}
-
-html.dark .text-green-600 {
-  color: #4ade80;
-}
-
-html.dark .text-green-500 {
-  color: #4ade80;
-}
-
-html.dark .bg-green-600 {
-  background-color: #16a34a;
-}
-
-/* ── Severity color overrides ── */
+/* ── Severity color overrides — red → grey flow ── */
 html.dark .bg-severity-critical\/\[0\.04\] {
-  background-color: rgba(220, 38, 38, 0.08);
+  background-color: rgba(217, 4, 41, 0.10);
 }
 
 html.dark .bg-severity-high\/\[0\.04\] {
-  background-color: rgba(234, 88, 12, 0.08);
+  background-color: rgba(196, 81, 108, 0.12);
 }
 
 html.dark .bg-severity-medium\/\[0\.04\] {
-  background-color: rgba(202, 138, 4, 0.08);
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -564,7 +579,7 @@ html.dark .react-flow__controls {
 }
 
 html.dark .react-flow__controls-button {
-  background-color: rgba(22,22,22,0.85) !important;
+  background-color: rgba(12,12,12,0.85) !important;
   border-color: rgba(255,255,255,0.06) !important;
   fill: #ececec !important;
 }
@@ -575,7 +590,7 @@ html.dark .react-flow__controls-button:hover {
 }
 
 html.dark .react-flow__minimap {
-  background-color: rgba(22,22,22,0.85) !important;
+  background-color: rgba(12,12,12,0.85) !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.3);
 }
 
@@ -583,136 +598,28 @@ html.dark .react-flow__edge-text {
   fill: #ececec;
 }
 
-/* ── Graph node inline overrides ── */
-html.dark .shadow-\[3px_3px_0px_\#1A1A1A\] {
-  box-shadow: 3px 3px 0px #333333;
-}
+/* Graph-node dark overrides previously lived here. They're now driven by
+   semantic Tailwind tokens (shadow-brutal, bg-tint-*, border-risk-*,
+   text-risk-*-deep) backed by CSS variables in :root + .dark — see top of
+   file. Nothing more is needed here. */
 
-html.dark .shadow-\[4px_4px_0px_\#1A1A1A\] {
-  box-shadow: 4px 4px 0px #333333;
-}
-
-html.dark .hover\:shadow-\[3px_3px_0px_\#1A1A1A\]:hover {
-  box-shadow: 3px 3px 0px #333333;
-}
-
-html.dark .hover\:shadow-\[4px_4px_0px_\#1A1A1A\]:hover {
-  box-shadow: 4px 4px 0px #333333;
-}
-
-html.dark .border-\[\#1A1A1A\] {
-  border-color: #2a2a2a;
-}
-
-html.dark .hover\:border-\[\#1A1A1A\]:hover {
-  border-color: #2a2a2a;
-}
-
-html.dark .shadow-\[2px_2px_0px_\#8B8B8B\] {
-  box-shadow: 2px 2px 0px #333333;
-}
-
-html.dark .shadow-\[3px_3px_0px_\#8B8B8B\] {
-  box-shadow: 3px 3px 0px #333333;
-}
-
-html.dark .shadow-\[3px_3px_0px_\#C8C8C8\] {
-  box-shadow: 3px 3px 0px #333333;
-}
-
-html.dark .shadow-\[3px_3px_0px_\#C4516C\] {
-  box-shadow: 3px 3px 0px rgba(196, 81, 108, 0.4);
-}
-
-html.dark .shadow-\[3px_3px_0px_\#D90429\] {
-  box-shadow: 3px 3px 0px #D90429;
-}
-
-html.dark .shadow-\[4px_4px_0px_\#D90429\] {
-  box-shadow: 4px 4px 0px #D90429;
-}
-
-html.dark .hover\:shadow-\[3px_3px_0px_\#D90429\]:hover {
-  box-shadow: 3px 3px 0px #D90429;
-}
-
-html.dark .hover\:shadow-\[4px_4px_0px_\#D90429\]:hover {
-  box-shadow: 4px 4px 0px #D90429;
-}
-
-html.dark .shadow-\[8px_8px_0px_\#1A1A1A\] {
-  box-shadow: 8px 8px 0px #333333;
-}
-
-/* ── Graph node background overrides ── */
-html.dark .bg-\[\#FDF2F4\] {
-  background-color: rgba(217, 4, 41, 0.12);
-}
-
-html.dark .bg-\[\#F4F4F4\] {
-  background-color: #1e1e1e;
-}
-
-html.dark .bg-\[\#FAFAF8\] {
-  background-color: #161616;
-}
-
-html.dark .bg-\[\#FAFAFA\] {
-  background-color: #161616;
-}
-
-/* ToolNode medium risk — #1A1A1A bg invisible on dark, lighten */
-html.dark .bg-\[\#1A1A1A\] {
-  background-color: #333333;
-}
-
-/* ── Graph node border overrides ── */
-html.dark .border-\[\#8B8B8B\] {
-  border-color: #3a3a3a;
-}
-
-html.dark .border-\[\#C8C8C8\] {
-  border-color: #2a2a2a;
-}
-
-html.dark .border-\[\#C4516C\] {
-  border-color: rgba(196, 81, 108, 0.5);
-}
-
-/* ── Graph node text overrides ── */
-html.dark .text-\[\#525252\] {
-  color: #a0a0a0;
-}
-
-html.dark .text-\[\#9F1239\] {
-  color: #ff6b6b;
-}
-
-html.dark .text-\[\#8B8B8B\] {
-  color: #777777;
-}
-
-html.dark .text-\[\#C4516C\] {
-  color: #e07090;
-}
-
-/* ── Dividers ── */
+/* ── Dividers — white hairlines, matched to the T3 card edge ── */
 html.dark .divide-y > :not([hidden]) ~ :not([hidden]) {
-  border-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 html.dark .border-t {
-  border-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 html.dark .border-b {
-  border-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 html.dark .border-b-2 {
-  border-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 html.dark .border-r-2 {
-  border-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.10);
 }

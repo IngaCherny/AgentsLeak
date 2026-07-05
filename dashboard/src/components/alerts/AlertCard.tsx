@@ -24,6 +24,13 @@ const catIcon = (cat: string) => {
   return Zap;
 };
 
+/** Left-border accent colour for an alert row, by severity — matches Dashboard. */
+const severityBorder = (sev: string) =>
+  sev === 'critical' ? '!border-l-risk-critical' :
+  sev === 'high' ? '!border-l-risk-high' :
+  sev === 'medium' ? '!border-l-risk-medium' :
+  '!border-l-transparent';
+
 // ── Props ───────────────────────────────────────────────────────────────────
 
 interface AlertCardProps {
@@ -35,6 +42,11 @@ interface AlertCardProps {
   /** Render as grid-cols-12 table row (for LiveFeed alerts table). */
   tableRow?: boolean;
   endpointLabel?: string;
+  /** Controlled expansion — when provided, overrides internal state (keyboard nav). */
+  expanded?: boolean;
+  onExpandedChange?: (next: boolean) => void;
+  /** Highlight as the keyboard-focused row. */
+  active?: boolean;
 }
 
 // ── Compact variant (for sidebar/dashboard) ─────────────────────────────────
@@ -202,13 +214,13 @@ function AlertExpandContent({
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     {ev.description && (
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-[9px] font-mono uppercase tracking-wider text-carbon/40 dark:text-white/30">Event</span>
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-carbon/40 dark:text-white/30">Event</span>
                         <span className="text-[11px] font-mono font-medium">{ev.description}</span>
                       </div>
                     )}
                     {ev.timestamp && (
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-[9px] font-mono uppercase tracking-wider text-carbon/40 dark:text-white/30">Time</span>
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-carbon/40 dark:text-white/30">Time</span>
                         <span className="text-[11px] font-mono font-medium">{new Date(ev.timestamp).toLocaleString()}</span>
                       </div>
                     )}
@@ -216,7 +228,7 @@ function AlertExpandContent({
                   {/* Dangerous content — command / url / file */}
                   {(ev.command || ev.url || ev.file_path) && (
                     <div>
-                      <p className="text-[8px] font-mono uppercase tracking-[0.15em] text-carbon/30 dark:text-white/25 mb-1">
+                      <p className="text-[10px] font-mono uppercase tracking-[0.15em] text-carbon/30 dark:text-white/25 mb-1">
                         {ev.command ? 'Matched Command' : ev.url ? 'Matched URL' : 'Matched File'}
                       </p>
                       <div className="bg-alert-red/[0.04] dark:bg-alert-red/[0.08] border-l-[3px] border-alert-red rounded-r-lg px-3 py-2 font-mono text-[11px] text-carbon dark:text-white break-all leading-relaxed">
@@ -271,8 +283,17 @@ export function AlertCard({
   compact = false,
   tableRow = false,
   endpointLabel,
+  expanded,
+  onExpandedChange,
+  active = false,
 }: AlertCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = expanded ?? internalExpanded;
+  const toggleExpanded = () => {
+    const next = !isExpanded;
+    if (onExpandedChange) onExpandedChange(next);
+    else setInternalExpanded(next);
+  };
 
   if (compact) {
     return <CompactAlertCard alert={alert} />;
@@ -290,28 +311,29 @@ export function AlertCard({
   const statusClass =
     alert.status === 'new' ? 'bg-severity-critical/[0.12] text-severity-critical' :
     alert.status === 'investigating' ? 'bg-severity-medium/[0.12] text-severity-medium' :
-    alert.status === 'resolved' ? 'bg-green-500/[0.12] text-green-600' :
+    alert.status === 'resolved' ? 'bg-carbon/[0.06] dark:bg-white/[0.08] text-carbon/55 dark:text-white/55' :
     'bg-carbon/[0.06] opacity-50';
 
   // ── Table-row variant (grid-cols-12, for LiveFeed) ─────────────────
   if (tableRow) {
     return (
       <div className={cn(
-        'transition-colors',
+        'transition-colors border-l-[3px]',
+        severityBorder(alert.severity),
         isNew && 'bg-paper-dark animate-fade-in',
         isExpanded && 'bg-carbon/[0.02]',
         alert.status === 'resolved' && 'opacity-40',
-        alert.status === 'false_positive' && 'opacity-30',
+        alert.status === 'false_positive' && 'opacity-40',
       )}>
         <div
           className="grid grid-cols-12 gap-3 px-4 py-3 items-center cursor-pointer hover:bg-paper-dark transition-colors"
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={toggleExpanded}
         >
           {/* Severity */}
           <div className="col-span-1">
             <span className={cn('inline-block text-[10px] font-bold rounded-full px-2 py-0.5 uppercase',
               alert.severity === 'critical' ? 'bg-severity-critical/[0.12] text-severity-critical' :
-              alert.severity === 'high' ? 'bg-[#C4516C]/[0.12] text-[#C4516C]' :
+              alert.severity === 'high' ? 'bg-risk-high/[0.12] text-risk-high-deep' :
               alert.severity === 'medium' ? 'bg-severity-medium/[0.12] text-severity-medium' :
               alert.severity === 'low' ? 'bg-carbon/[0.08] text-carbon/60' :
               'bg-carbon/[0.06] text-carbon/40'
@@ -323,10 +345,10 @@ export function AlertCard({
           {/* Alert title + policy */}
           <div className="col-span-3 min-w-0">
             <div className="flex items-center gap-2">
-              <Icon className="w-3.5 h-3.5 opacity-30 flex-shrink-0" />
+              <Icon className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
               <p className="text-sm font-medium truncate">{alert.title}</p>
               {alert.blocked && (
-                <span className="text-[9px] font-bold rounded-full bg-severity-critical/[0.12] text-severity-critical px-1.5 py-0.5 flex-shrink-0">BLOCKED</span>
+                <span className="text-[10px] font-bold rounded-full bg-severity-critical/[0.12] text-severity-critical px-1.5 py-0.5 flex-shrink-0">BLOCKED</span>
               )}
             </div>
             {alert.policy_name && (
@@ -351,7 +373,7 @@ export function AlertCard({
             {epLabel ? (
               <span className="text-xs font-mono opacity-50">{epLabel}</span>
             ) : (
-              <span className="text-xs opacity-30">&mdash;</span>
+              <span className="text-xs opacity-40">&mdash;</span>
             )}
           </div>
 
@@ -363,7 +385,7 @@ export function AlertCard({
           {/* Expand */}
           <div className="col-span-2 flex justify-end">
             <ChevronRight className={cn(
-              'w-3.5 h-3.5 opacity-30 transition-transform',
+              'w-3.5 h-3.5 opacity-40 transition-transform',
               isExpanded && 'rotate-90'
             )} />
           </div>
@@ -383,23 +405,28 @@ export function AlertCard({
 
   // ── Default flex variant (Alerts page) ─────────────────────────────
   return (
-    <div className={cn(
-      'border-t',
-      alert.status === 'resolved' && 'opacity-40',
-      alert.status === 'false_positive' && 'opacity-30',
-    )}>
+    <div
+      data-alert-id={alert.id}
+      className={cn(
+        'border-t border-l-[3px] transition-colors',
+        severityBorder(alert.severity),
+        active && 'bg-alert-red/[0.05] dark:bg-alert-red/[0.08]',
+        alert.status === 'resolved' && 'opacity-40',
+        alert.status === 'false_positive' && 'opacity-40',
+      )}
+    >
       {/* Row */}
       <div
         className="px-4 py-3 flex items-center gap-4 cursor-pointer hover:bg-carbon/[0.02] transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggleExpanded}
       >
-        <Icon className="w-4 h-4 opacity-30 flex-shrink-0" />
+        <Icon className="w-4 h-4 opacity-40 flex-shrink-0" />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium truncate">{alert.title}</p>
             {alert.blocked && (
-              <span className="text-[9px] font-bold rounded-full bg-severity-critical/[0.12] text-severity-critical px-1.5 py-0.5">BLOCKED</span>
+              <span className="text-[10px] font-bold rounded-full bg-severity-critical/[0.12] text-severity-critical px-1.5 py-0.5">BLOCKED</span>
             )}
           </div>
           <p className="text-xs opacity-40 mt-0.5">
@@ -414,11 +441,11 @@ export function AlertCard({
               {epLabel}
             </span>
           )}
-          <code className="text-[10px] opacity-30">{alert.session_id.slice(0, 12)}</code>
+          <code className="text-[10px] opacity-40">{alert.session_id.slice(0, 12)}</code>
         </div>
 
         <ChevronRight className={cn(
-          'w-3.5 h-3.5 opacity-30 transition-transform flex-shrink-0',
+          'w-3.5 h-3.5 opacity-40 transition-transform flex-shrink-0',
           isExpanded && 'rotate-90'
         )} />
       </div>

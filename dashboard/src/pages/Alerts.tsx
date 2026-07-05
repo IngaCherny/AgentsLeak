@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -8,15 +8,16 @@ import {
   X,
   Shield,
   ShieldOff,
-  CheckCircle,
+  Inbox,
   Monitor,
   Cpu,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAlerts, useUpdateAlertStatus, useEndpointStats, useSessions } from '@/api/queries';
+import { useAlerts, useUpdateAlertStatus, useEndpointStats, useSessions, useStats } from '@/api/queries';
 import { AlertCard } from '@/components/alerts/AlertCard';
+import { StatTile } from '@/components/common/StatTile';
 import { Severity, AlertStatus } from '@/api/types';
 import type { Alert } from '@/api/types';
 
@@ -29,24 +30,24 @@ const SEVERITY_GROUPS = [
     key: 'critical',
     label: 'Critical',
     bg: 'bg-severity-critical/[0.04]',
-    dot: 'bg-severity-critical',
-    badge: 'bg-severity-critical text-white',
+    dot: 'bg-risk-critical',
+    badge: 'bg-risk-critical text-white',
     match: (a: Alert) => a.severity === Severity.Critical,
   },
   {
     key: 'high',
     label: 'High',
     bg: 'bg-severity-high/[0.04]',
-    dot: 'bg-severity-high',
-    badge: 'bg-severity-high text-white',
+    dot: 'bg-risk-high',
+    badge: 'bg-risk-high text-white',
     match: (a: Alert) => a.severity === Severity.High,
   },
   {
     key: 'medium',
     label: 'Medium',
     bg: 'bg-severity-medium/[0.04]',
-    dot: 'bg-severity-medium',
-    badge: 'bg-severity-medium text-white',
+    dot: 'bg-risk-medium',
+    badge: 'bg-risk-medium text-white',
     match: (a: Alert) => a.severity === Severity.Medium,
   },
   {
@@ -61,50 +62,20 @@ const SEVERITY_GROUPS = [
 
 // ─── Stats Cards ────────────────────────────────────────────────────────────
 
-function AlertStatsCards({ alerts }: { alerts: Alert[] }) {
-  const total = alerts.length;
-  const criticalCount = alerts.filter(a => a.severity === Severity.Critical).length;
-  const blockedCount = alerts.filter(a => a.blocked).length;
-  const resolvedCount = alerts.filter(a => a.status === AlertStatus.Resolved || a.status === AlertStatus.FalsePositive).length;
+// Pulls true database-wide totals from /api/stats — not the paginated
+// alert page, which only ever holds one page (≤ pageSize) of rows.
+function AlertStatsCards() {
+  const { data: stats, isLoading } = useStats();
+  const critical = stats?.alerts_by_severity?.critical ?? 0;
+  const blocked = stats?.blocked_actions ?? 0;
+  const fresh = stats?.new_alerts ?? 0;
 
   return (
-    <div className="grid grid-cols-4 gap-3">
-      <div className="card p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-[10px] bg-carbon/[0.08] flex items-center justify-center">
-          <AlertTriangle className="w-5 h-5 text-carbon/60" />
-        </div>
-        <div>
-          <p className="text-xl font-bold text-carbon">{total}</p>
-          <p className="text-[10px] font-mono opacity-40 uppercase">Total Alerts</p>
-        </div>
-      </div>
-      <div className="card p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-[10px] bg-severity-critical/[0.12] flex items-center justify-center">
-          <AlertTriangle className="w-5 h-5 text-severity-critical" />
-        </div>
-        <div>
-          <p className="text-xl font-bold text-severity-critical">{criticalCount}</p>
-          <p className="text-[10px] font-mono opacity-40 uppercase">Critical</p>
-        </div>
-      </div>
-      <div className="card p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-[10px] bg-[#D90429]/[0.12] flex items-center justify-center">
-          <ShieldOff className="w-5 h-5 text-[#D90429]" />
-        </div>
-        <div>
-          <p className="text-xl font-bold text-[#D90429]">{blockedCount}</p>
-          <p className="text-[10px] font-mono opacity-40 uppercase">Blocked</p>
-        </div>
-      </div>
-      <div className="card p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-[10px] bg-green-500/[0.12] flex items-center justify-center">
-          <CheckCircle className="w-5 h-5 text-green-500" />
-        </div>
-        <div>
-          <p className="text-xl font-bold text-green-600">{resolvedCount}</p>
-          <p className="text-[10px] font-mono opacity-40 uppercase">Resolved</p>
-        </div>
-      </div>
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatTile title="Total Alerts" value={stats?.total_alerts ?? 0} icon={AlertTriangle} isLoading={isLoading} />
+      <StatTile title="Critical" value={critical} icon={AlertTriangle} accent={critical > 0} isLoading={isLoading} />
+      <StatTile title="Blocked" value={blocked} icon={ShieldOff} accent={blocked > 0} isLoading={isLoading} />
+      <StatTile title="New" value={fresh} icon={Inbox} accent={fresh > 0} isLoading={isLoading} />
     </div>
   );
 }
@@ -120,6 +91,8 @@ export default function Alerts() {
   const [page, setPage] = useState(1);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [resolvedCollapsed, setResolvedCollapsed] = useState(true);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const pageSize = 50;
 
   const { data: endpointData } = useEndpointStats();
@@ -200,6 +173,65 @@ export default function Alerts() {
     alerts: activeAlerts.filter(g.match),
   })).filter(g => g.alerts.length > 0);
 
+  // ── Keyboard navigation (j / k to move, Enter to expand) ──────────────
+  // Flat list of currently-visible alert rows, in render order.
+  const orderedAlerts = useMemo(() => {
+    const list: Alert[] = [];
+    for (const g of groups) {
+      if (!collapsedGroups.has(g.key)) list.push(...g.alerts);
+    }
+    if (!resolvedCollapsed) list.push(...resolvedAlerts);
+    return list;
+  }, [groups, collapsedGroups, resolvedAlerts, resolvedCollapsed]);
+
+  const alertIndex = useMemo(
+    () => new Map(orderedAlerts.map((a, i) => [a.id, i])),
+    [orderedAlerts],
+  );
+
+  const toggleExpand = (id: string) =>
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Ignore while the command palette owns the keyboard.
+      if (document.querySelector('[data-command-palette]')) return;
+      if (orderedAlerts.length === 0) return;
+
+      if (e.key === 'j') {
+        e.preventDefault();
+        setActiveIdx(i => Math.min(orderedAlerts.length - 1, i + 1));
+      } else if (e.key === 'k') {
+        e.preventDefault();
+        setActiveIdx(i => Math.max(0, (i < 0 ? 1 : i) - 1));
+      } else if (e.key === 'Enter' || e.key === 'o') {
+        const a = orderedAlerts[activeIdx];
+        if (a) {
+          e.preventDefault();
+          toggleExpand(a.id);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [orderedAlerts, activeIdx]);
+
+  // Keep the keyboard-focused row scrolled into view.
+  useEffect(() => {
+    const a = orderedAlerts[activeIdx];
+    if (!a) return;
+    document
+      .querySelector(`[data-alert-id="${a.id}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [activeIdx, orderedAlerts]);
+
   const handleAcknowledge = (id: string) => {
     updateStatusMutation.mutate({ id, status: AlertStatus.Investigating });
   };
@@ -220,7 +252,6 @@ export default function Alerts() {
   };
 
   const hasActiveFilters = searchQuery || actionFilter !== 'all';
-  const blockedCount = filteredAlerts.filter(a => a.blocked).length;
 
   const startIndex = (page - 1) * pageSize + 1;
   const endIndex = Math.min(page * pageSize, total);
@@ -375,9 +406,6 @@ export default function Alerts() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs font-mono opacity-40">
-            {filteredAlerts.length} alerts &middot; {blockedCount} blocked
-          </span>
           <button
             onClick={() => refetch()}
             disabled={isFetching}
@@ -389,8 +417,8 @@ export default function Alerts() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      {!isLoading && !isError && <AlertStatsCards alerts={filteredAlerts} />}
+      {/* Stats Cards — database-wide totals, independent of the list filters */}
+      {!isError && <AlertStatsCards />}
 
       {/* Error State */}
       {isError && (
@@ -481,6 +509,9 @@ export default function Alerts() {
                             onAcknowledge={handleAcknowledge}
                             onResolve={handleResolve}
                             onMarkFalsePositive={handleMarkFalsePositive}
+                            active={alertIndex.get(alert.id) === activeIdx}
+                            expanded={expandedIds.has(alert.id)}
+                            onExpandedChange={() => toggleExpand(alert.id)}
                           />
                         ))}
                       </div>
@@ -493,7 +524,7 @@ export default function Alerts() {
               {resolvedAlerts.length > 0 && (
                 <div className="card">
                   <div
-                    className="px-4 py-3 flex items-center justify-between cursor-pointer transition-colors bg-green-500/[0.04]"
+                    className="px-4 py-3 flex items-center justify-between cursor-pointer transition-colors bg-carbon/[0.02] dark:bg-white/[0.03]"
                     onClick={() => setResolvedCollapsed(!resolvedCollapsed)}
                   >
                     <div className="flex items-center gap-3">
@@ -501,10 +532,10 @@ export default function Alerts() {
                         ? <ChevronRight className="w-4 h-4" />
                         : <ChevronDown className="w-4 h-4" />
                       }
-                      <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-carbon/45 dark:bg-white/45" />
                       <span className="font-bold text-sm">Resolved & Dismissed</span>
                     </div>
-                    <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-green-500/10 text-green-700">
+                    <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-carbon/[0.06] dark:bg-white/[0.08] text-carbon/60 dark:text-white/55">
                       {resolvedAlerts.length}
                     </span>
                   </div>
@@ -518,6 +549,9 @@ export default function Alerts() {
                           onAcknowledge={handleAcknowledge}
                           onResolve={handleResolve}
                           onMarkFalsePositive={handleMarkFalsePositive}
+                          active={alertIndex.get(alert.id) === activeIdx}
+                          expanded={expandedIds.has(alert.id)}
+                          onExpandedChange={() => toggleExpand(alert.id)}
                         />
                       ))}
                     </div>
@@ -537,7 +571,7 @@ export default function Alerts() {
           </p>
           <div className="flex items-center gap-2">
             <button
-              className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none"
               disabled={page === 1 || isFetching}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
@@ -545,7 +579,7 @@ export default function Alerts() {
             </button>
             <span className="px-3 py-2 text-xs font-mono opacity-40">Page {page}</span>
             <button
-              className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none"
               disabled={!hasMore || isFetching}
               onClick={() => setPage((p) => p + 1)}
             >

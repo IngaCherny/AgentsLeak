@@ -33,8 +33,12 @@ AgentsLeak operates as a sidecar service alongside AI coding agents. It receives
                         │                       │
                         │  PreToolUse ──────────┼──── Can BLOCK before execution
                         │  PostToolUse ─────────┼──── Logs after execution
+                        │  PostToolUseFailure ──┼──── Logs failed executions
+                        │  PermissionRequest ───┼──── Tracks user approve/deny
+                        │  PreCompact ──────────┼──── Snapshot before compaction
+                        │  UserPromptSubmit ────┼──── Audit user prompts
                         │  SessionStart/End ────┼──── Session lifecycle
-                        │  SubagentStart ───────┼──── Subagent tracking
+                        │  SubagentStart/Stop ──┼──── Subagent tracking
                         └──────────┬────────────┘
                                    │ HTTP POST (JSON)
                                    ▼
@@ -129,10 +133,14 @@ The collector provides HTTP endpoints that receive hook payloads from Claude Cod
 |---|---|---|
 | `POST /api/collect/pre-tool-use` | PreToolUse | Synchronous evaluation, may return block decision |
 | `POST /api/collect/post-tool-use` | PostToolUse | Async processing, always returns `{status: received}` |
+| `POST /api/collect/post-tool-use-error` | PostToolUseFailure | Logs failed tool executions |
+| `POST /api/collect/permission-request` | PermissionRequest | Synchronous; tracks approve/deny decisions |
+| `POST /api/collect/user-prompt-submit` | UserPromptSubmit | Async; audit trail of user prompts |
+| `POST /api/collect/pre-compact` | PreCompact | Async; snapshots state before context compaction |
 | `POST /api/collect/session-start` | SessionStart | Creates session record |
 | `POST /api/collect/session-end` | SessionEnd | Marks session as ended |
 | `POST /api/collect/subagent-start` | SubagentStart | Creates child session with parent reference |
-| `POST /api/collect/post-tool-use-error` | PostToolUseFailure | Logs failed tool executions |
+| `POST /api/collect/subagent-stop` | SubagentStop | Marks subagent session as ended |
 
 Sessions are auto-created on first event if no explicit `session-start` was received.
 
@@ -159,6 +167,7 @@ class Engine:
    - `Bash` → `COMMAND_EXEC`
    - `WebFetch`, `WebSearch` → `NETWORK_ACCESS`
    - `Task` → `SUBAGENT_SPAWN`
+   - `mcp__<server>__<tool>` (any tool name with the `mcp__` prefix) → `MCP_TOOL_USE`
 
 2. **Enrichment** — Extracts structured metadata from raw tool inputs:
    - File paths from `file_path`, `path`, and command arguments
@@ -337,18 +346,24 @@ The dashboard supports light and dark modes via Tailwind CSS's `darkMode: 'class
 
 ## Hook Integration
 
-AgentsLeak integrates with Claude Code through its [hooks system](https://docs.anthropic.com/en/docs/claude-code/hooks).
+AgentsLeak integrates with Claude Code through its [hooks system](https://code.claude.com/docs/en/hooks).
 
 ### Hook types used
 
-| Hook | When it fires | AgentsLeak behavior |
-|---|---|---|
-| `PreToolUse` | Before any tool executes | Evaluate policies, may BLOCK the action |
-| `PostToolUse` | After a tool executes | Log the event, run detection rules |
-| `PostToolUseFailure` | After a tool fails | Log the failure event |
-| `SessionStart` | When a session begins | Create session record |
-| `SessionEnd` | When a session ends | Mark session as ended |
-| `SubagentStart` | When a subagent spawns | Create child session linked to parent |
+| Hook | Mode | When it fires | AgentsLeak behavior |
+|---|---|---|---|
+| `PreToolUse` | sync | Before any tool executes (including MCP tools, which appear as `mcp__<server>__<tool>`) | Evaluate policies, may BLOCK the action |
+| `PostToolUse` | async | After a tool executes successfully | Log the event, run detection rules |
+| `PostToolUseFailure` | async | After a tool fails | Log the failure event |
+| `PermissionRequest` | sync | When the user is prompted to approve/deny an action | Track decisions for rubber-stamping detection |
+| `UserPromptSubmit` | async | When the user submits a prompt | Audit trail; prompt-injection detection input |
+| `PreCompact` | async | Before Claude Code compacts the conversation context | Snapshot state so the audit trail has no gap across compaction |
+| `SessionStart` | async | When a session begins | Create session record |
+| `SessionEnd` | async | When a session ends | Mark session as ended |
+| `SubagentStart` | async | When a subagent spawns | Create child session linked to parent |
+| `SubagentStop` | async | When a subagent completes | Mark child session as ended |
+
+> Hooks not yet wired but available in Claude Code (potential future additions): `PermissionDenied`, `PostCompact`, `Notification`, `Stop`, `Elicitation` / `ElicitationResult` (MCP user-input prompts), `PostToolBatch`, `CwdChanged`, `FileChanged`. See the [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) for the complete list.
 
 ### Installation
 
@@ -401,11 +416,14 @@ Event
 ├── id: UUID
 ├── session_id: string
 ├── timestamp: datetime
-├── hook_type: PreToolUse | PostToolUse | SessionStart | SessionEnd | SubagentStart
-├── tool_name: string (Bash, Read, Write, Edit, WebFetch, etc.)
+├── hook_type: PreToolUse | PostToolUse | PostToolUseFailure | PermissionRequest |
+│              UserPromptSubmit | PreCompact | SessionStart | SessionEnd |
+│              SubagentStart | SubagentStop
+├── tool_name: string (Bash, Read, Write, Edit, WebFetch, mcp__<server>__<tool>, etc.)
 ├── tool_input: JSON (command, file_path, url, etc.)
 ├── tool_result: JSON (output, error, exit_code)
-├── category: file_read | file_write | command_exec | network_access | subagent_spawn | ...
+├── category: file_read | file_write | file_delete | command_exec | network_access |
+│             code_execution | subagent_spawn | mcp_tool_use | session_lifecycle | unknown
 ├── severity: critical | high | medium | low | info
 ├── file_paths: string[]
 ├── commands: string[]
@@ -479,4 +497,4 @@ AgentsLeak is designed to monitor agents running in the user's local environment
 
 - [README.md](../README.md) — Quick start and API reference
 - [docs/TESTING.md](TESTING.md) — Testing documentation
-- [Claude Code Hooks Documentation](https://docs.anthropic.com/en/docs/claude-code/hooks) — Official hook system docs
+- [Claude Code Hooks Documentation](https://code.claude.com/docs/en/hooks) — Official hook system docs

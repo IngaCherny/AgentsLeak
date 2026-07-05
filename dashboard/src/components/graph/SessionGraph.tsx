@@ -275,7 +275,7 @@ function transformApiData(
       },
       animated: isDanger,
       labelStyle: { fill: color, fontSize: 8, fontFamily: 'JetBrains Mono, monospace', fontWeight: 500 },
-      labelBgStyle: { fill: isDark ? '#161616' : '#FFFFFF', fillOpacity: isDark ? 0.9 : 0.85 },
+      labelBgStyle: { fill: isDark ? '#0C0C0C' : '#FFFFFF', fillOpacity: isDark ? 0.9 : 0.85 },
       labelBgPadding: [3, 1.5] as [number, number],
     };
   });

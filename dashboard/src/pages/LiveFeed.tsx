@@ -1,17 +1,21 @@
 import { useState, useMemo } from 'react';
-import { Pause, Play, Trash2, Filter, Download, X, Search, AlertTriangle, Monitor, Layers, Cpu } from 'lucide-react';
+import { Pause, Play, Trash2, Filter, Download, X, Search, AlertTriangle, Monitor, Layers, Cpu, Link2, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LiveIndicator } from '@/components/common/LiveIndicator';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { EventCard } from '@/components/events/EventCard';
+import { PairedEventCard } from '@/components/events/PairedEventCard';
+import { pairEvents } from '@/components/events/pairEvents';
 import { AlertCard } from '@/components/alerts/AlertCard';
 import { useSessions, useEndpointStats } from '@/api/queries';
 import { EventCategory, Severity, SessionStatus } from '@/api/types';
 
 type TabType = 'events' | 'alerts';
+type ViewMode = 'paired' | 'raw';
 
 export default function LiveFeed() {
   const [activeTab, setActiveTab] = useState<TabType>('events');
+  const [viewMode, setViewMode] = useState<ViewMode>('paired');
   const [showFilters, setShowFilters] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<Severity | ''>('');
@@ -107,6 +111,9 @@ export default function LiveFeed() {
     });
   }, [events, categoryFilter, severityFilter, sessionFilter, endpointFilter, sourceFilter, searchQuery, activeSessions, sessionSourceMap]);
 
+  // Pair Pre+Post (and Failure / Block) events so each tool call renders as one card.
+  const pairedEvents = useMemo(() => pairEvents(filteredEvents), [filteredEvents]);
+
   // Filter alerts based on filters
   const filteredAlerts = useMemo(() => {
     let endpointSessionIds: Set<string> | null = null;
@@ -178,6 +185,30 @@ export default function LiveFeed() {
         </div>
 
         <div className="flex items-center gap-2">
+          {activeTab === 'events' && (
+            <button
+              onClick={() => setViewMode(viewMode === 'paired' ? 'raw' : 'paired')}
+              className="btn btn-secondary flex items-center gap-2"
+              title={
+                viewMode === 'paired'
+                  ? 'Showing one card per tool call (PreToolUse + PostToolUse paired). Click for raw event list.'
+                  : 'Showing every event individually. Click to pair Pre/Post into one card per tool call.'
+              }
+            >
+              {viewMode === 'paired' ? (
+                <>
+                  <Link2 className="w-4 h-4" />
+                  Paired
+                </>
+              ) : (
+                <>
+                  <List className="w-4 h-4" />
+                  Raw
+                </>
+              )}
+            </button>
+          )}
+
           <button
             onClick={() => (isPaused ? resumeUpdates() : pauseUpdates())}
             className={cn(
@@ -432,18 +463,26 @@ export default function LiveFeed() {
         {activeTab === 'events' ? (
           <>
             {/* Events Table Header */}
-            <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-carbon/10 text-[10px] font-mono uppercase tracking-wider font-bold opacity-50 bg-carbon/[0.03]">
+            <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-carbon/10 text-[10px] font-mono uppercase tracking-wider font-bold text-carbon/50 dark:text-white/40 bg-[#F1F1F3] dark:bg-[#141414] sticky top-0 z-10 rounded-t-2xl">
               <div className="col-span-1">Time</div>
               <div className="col-span-2">Endpoint</div>
               <div className="col-span-1">Session</div>
               <div className="col-span-2">Category</div>
               <div className="col-span-1">Severity</div>
               <div className="col-span-4">Details</div>
-              <div className="col-span-1"></div>
+              <div className="col-span-1 text-right">
+                {viewMode === 'paired' ? 'State' : ''}
+              </div>
             </div>
 
             {/* Events List */}
-            <div className="divide-y divide-carbon/[0.06]">
+            <div
+              className={cn(
+                viewMode === 'raw'
+                  ? 'divide-y divide-carbon/[0.06] overflow-hidden rounded-b-2xl'
+                  : 'py-2 overflow-hidden rounded-b-2xl',
+              )}
+            >
               {filteredEvents.length === 0 ? (
                 <div className="p-12 text-center">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-[10px] bg-carbon/[0.06] mb-4">
@@ -458,6 +497,15 @@ export default function LiveFeed() {
                       : 'Events will appear here in real-time as AI agents perform actions. Make sure you have agents connected and running.'}
                   </p>
                 </div>
+              ) : viewMode === 'paired' ? (
+                pairedEvents.map((pair) => (
+                  <PairedEventCard
+                    key={pair.key}
+                    pair={pair}
+                    endpointLabel={sessionEndpointMap.get(pair.pre.session_id)}
+                    showSession
+                  />
+                ))
               ) : (
                 filteredEvents.map((event) => (
                   <EventCard
@@ -473,7 +521,7 @@ export default function LiveFeed() {
         ) : (
           <>
             {/* Alerts Table Header */}
-            <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-carbon/10 text-[10px] font-mono uppercase tracking-wider font-bold opacity-50 bg-carbon/[0.03]">
+            <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-carbon/10 text-[10px] font-mono uppercase tracking-wider font-bold text-carbon/50 dark:text-white/40 bg-[#F1F1F3] dark:bg-[#141414] sticky top-0 z-10 rounded-t-2xl">
               <div className="col-span-1">Severity</div>
               <div className="col-span-3">Alert</div>
               <div className="col-span-1">Status</div>
@@ -484,7 +532,7 @@ export default function LiveFeed() {
             </div>
 
             {/* Alerts List */}
-            <div className="divide-y divide-carbon/[0.06]">
+            <div className="divide-y divide-carbon/[0.06] overflow-hidden rounded-b-2xl">
               {filteredAlerts.length === 0 ? (
                 <div className="p-12 text-center">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-[10px] bg-carbon/[0.06] mb-4">

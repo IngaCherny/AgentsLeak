@@ -106,7 +106,7 @@ function PolicyPreviewCard({
               {policy.conditions.map((c, i) => (
                 <div key={i} className="flex items-center gap-2 bg-carbon/[0.03] rounded-lg px-3 py-2">
                   <span className="text-[11px] font-mono font-semibold whitespace-nowrap">{c.field}</span>
-                  <span className="text-[9px] font-mono font-medium bg-carbon text-white rounded px-1.5 py-0.5 whitespace-nowrap">{c.operator}</span>
+                  <span className="text-[10px] font-mono font-medium bg-carbon text-white rounded px-1.5 py-0.5 whitespace-nowrap">{c.operator}</span>
                   <span className="text-[11px] font-mono font-medium text-alert-red break-all">
                     {typeof c.value === 'string' ? c.value : JSON.stringify(c.value)}
                   </span>
@@ -132,7 +132,7 @@ function PolicyPreviewCard({
 
       <div className="px-4 py-3 border-t border-carbon/10 flex justify-end">
         {applied ? (
-          <span className="flex items-center gap-1.5 text-sm text-green-600 font-medium">
+          <span className="flex items-center gap-1.5 text-sm text-carbon/70 dark:text-white/65 font-medium">
             <Check className="w-4 h-4" />
             Applied
           </span>

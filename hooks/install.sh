@@ -150,6 +150,7 @@ copy_hook_scripts() {
         "pre-tool-use.sh"
         "post-tool-use.sh"
         "post-tool-use-error.sh"
+        "pre-compact.sh"
         "session-start.sh"
         "session-end.sh"
         "subagent-start.sh"
@@ -224,6 +225,17 @@ configure_claude_code() {
           {
             "type": "command",
             "command": "${HOOKS_DIR}/post-tool-use-error.sh"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOOKS_DIR}/pre-compact.sh"
           }
         ]
       }

@@ -95,7 +95,7 @@ export default function TimeWindowSlider({ min, max, onChange, defaultPreset = '
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 border-b border-carbon/[0.06] bg-carbon/[0.02]">
-      <Clock className="w-3.5 h-3.5 opacity-30 flex-shrink-0" />
+      <Clock className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
 
       <div className="flex items-center gap-1 flex-shrink-0">
         {PRESETS.map((p) => (

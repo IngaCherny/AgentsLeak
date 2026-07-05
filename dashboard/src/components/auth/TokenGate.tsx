@@ -114,7 +114,7 @@ export default function TokenGate({ children }: TokenGateProps) {
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 text-xs text-red-400">
+            <div className="flex items-center gap-2 text-xs text-alert-red">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
               <span>{error}</span>
             </div>

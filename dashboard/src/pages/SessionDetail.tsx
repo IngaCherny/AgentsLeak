@@ -16,11 +16,15 @@ import {
   Maximize2,
   Search,
   ShieldAlert,
+  Link2,
+  List,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSession, useSessionEvents, useSessionAlerts, useTerminateSession, useTimeline } from '@/api/queries';
 import { EventCard, EventCardSkeleton, AggregatedEventCard } from '@/components/events/EventCard';
 import { aggregateEvents } from '@/components/events/aggregateEvents';
+import { pairEvents } from '@/components/events/pairEvents';
+import { PairedEventCard } from '@/components/events/PairedEventCard';
 import { AlertCard, AlertCardSkeleton } from '@/components/alerts/AlertCard';
 import { TimeAgo } from '@/components/common/TimeAgo';
 import { EventCategory, Severity } from '@/api/types';
@@ -31,9 +35,9 @@ type TabType = 'timeline' | 'events' | 'alerts' | 'files' | 'commands' | 'networ
 
 const statusStyles: Record<string, { bg: string; text: string; border: string }> = {
   active: {
-    bg: 'bg-green-50',
-    text: 'text-green-600',
-    border: 'border-green-200',
+    bg: 'bg-carbon/[0.05] dark:bg-white/[0.06]',
+    text: 'text-carbon/65 dark:text-white/60',
+    border: 'border-carbon/15 dark:border-white/15',
   },
   ended: {
     bg: 'bg-carbon/[0.04]',
@@ -46,6 +50,7 @@ export default function SessionDetail() {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
   const [eventsPage, setEventsPage] = useState(1);
+  const [logViewMode, setLogViewMode] = useState<'paired' | 'raw'>('paired');
   const [categoryFilter, setCategoryFilter] = useState<EventCategory | ''>('');
   const [severityFilter, setSeverityFilter] = useState<Severity | ''>('');
   const [logSearch, setLogSearch] = useState('');
@@ -115,6 +120,11 @@ export default function SessionDetail() {
   // Aggregate events for the event log (group same file/command/url)
   const aggregatedLogEvents = useMemo(
     () => aggregateEvents(filteredLogEvents),
+    [filteredLogEvents]
+  );
+
+  const pairedLogEvents = useMemo(
+    () => pairEvents(filteredLogEvents),
     [filteredLogEvents]
   );
 
@@ -220,7 +230,7 @@ export default function SessionDetail() {
                   )}
                 >
                   {session.status === 'active' && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-carbon/50 dark:bg-white/50 animate-pulse" />
                   )}
                   {session.status}
                 </span>
@@ -294,8 +304,8 @@ export default function SessionDetail() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-amber-500/[0.12] flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <div className="w-9 h-9 rounded-[10px] bg-alert-red/[0.09] flex items-center justify-center">
+              <AlertTriangle className="w-4 h-4 text-alert-red" />
             </div>
             <div>
               <p className="text-xs opacity-40">Alerts</p>
@@ -348,7 +358,7 @@ export default function SessionDetail() {
                     </p>
                   )}
                 </div>
-                <span className="text-xs font-mono opacity-30">
+                <span className="text-xs font-mono opacity-40">
                   {sessionTimelineParams.interval}
                 </span>
               </div>
@@ -406,9 +416,9 @@ export default function SessionDetail() {
                     )} />
                     <span className="text-sm flex-1 min-w-0 truncate">{alert.title}</span>
                     {alert.blocked && (
-                      <span className="text-[9px] font-bold rounded-full bg-severity-critical/[0.12] text-severity-critical px-1.5 py-0.5 flex-shrink-0">BLOCKED</span>
+                      <span className="text-[10px] font-bold rounded-full bg-severity-critical/[0.12] text-severity-critical px-1.5 py-0.5 flex-shrink-0">BLOCKED</span>
                     )}
-                    <span className="text-[10px] font-mono opacity-30 flex-shrink-0">
+                    <span className="text-[10px] font-mono opacity-40 flex-shrink-0">
                       {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </span>
                   </div>
@@ -477,31 +487,76 @@ export default function SessionDetail() {
                     Clear
                   </button>
                 )}
-                <span className="text-xs opacity-40 ml-auto">
-                  {aggregatedLogEvents.length} groups · {filteredLogEvents.length}{logSearch ? ` / ${events.length}` : ''} events{eventsData && eventsData.total > events.length ? ` (${eventsData.total} total)` : ''}
+                <button
+                  onClick={() => setLogViewMode(logViewMode === 'paired' ? 'raw' : 'paired')}
+                  className="text-xs font-mono uppercase tracking-wider opacity-50 hover:opacity-100 hover:text-alert-red flex items-center gap-1.5 ml-auto"
+                  title={
+                    logViewMode === 'paired'
+                      ? 'Showing one card per tool call (Pre+Post paired). Click to group by target instead.'
+                      : 'Grouping events by target (file/command/URL). Click to pair Pre+Post per tool call.'
+                  }
+                >
+                  {logViewMode === 'paired' ? (
+                    <>
+                      <Link2 className="w-3 h-3" /> Paired
+                    </>
+                  ) : (
+                    <>
+                      <List className="w-3 h-3" /> Raw
+                    </>
+                  )}
+                </button>
+                <span className="text-xs opacity-40">
+                  {logViewMode === 'paired'
+                    ? `${pairedLogEvents.length} calls`
+                    : `${aggregatedLogEvents.length} groups`}
+                  {' · '}
+                  {filteredLogEvents.length}{logSearch ? ` / ${events.length}` : ''} events
+                  {eventsData && eventsData.total > events.length ? ` (${eventsData.total} total)` : ''}
                 </span>
               </div>
             </div>
-            {/* Column headers */}
-            <div className="grid grid-cols-10 gap-4 px-4 py-2 border-b border-carbon/10 text-[11px] font-mono uppercase tracking-wider font-bold opacity-50 bg-carbon/[0.03]">
-              <div className="col-span-2">Time</div>
-              <div className="col-span-2">Category</div>
-              <div className="col-span-1">Count</div>
-              <div className="col-span-4">Target</div>
-              <div className="col-span-1"></div>
-            </div>
+            {/* Column headers — switch shape based on view mode to match the row layout */}
+            {logViewMode === 'paired' ? (
+              <div className="grid grid-cols-12 gap-3 px-4 py-2 border-b border-carbon/10 text-[11px] font-mono uppercase tracking-wider font-bold opacity-50 bg-carbon/[0.03]">
+                <div className="col-span-2">Time</div>
+                <div className="col-span-2">Category</div>
+                <div className="col-span-1">Severity</div>
+                <div className="col-span-4">Details</div>
+                <div className="col-span-2"></div>
+                <div className="col-span-1 text-right">State</div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-10 gap-4 px-4 py-2 border-b border-carbon/10 text-[11px] font-mono uppercase tracking-wider font-bold opacity-50 bg-carbon/[0.03]">
+                <div className="col-span-2">Time</div>
+                <div className="col-span-2">Category</div>
+                <div className="col-span-1">Count</div>
+                <div className="col-span-4">Target</div>
+                <div className="col-span-1"></div>
+              </div>
+            )}
             {eventsLoading ? (
               <div className="divide-y divide-carbon/[0.06]">
                 {[...Array(5)].map((_, i) => (
                   <EventCardSkeleton key={i} />
                 ))}
               </div>
-            ) : aggregatedLogEvents.length === 0 ? (
+            ) : (logViewMode === 'paired' ? pairedLogEvents.length === 0 : aggregatedLogEvents.length === 0) ? (
               <div className="p-12 text-center">
-                <Activity className="w-12 h-12 opacity-20 mx-auto mb-3" />
+                <Activity className="w-12 h-12 opacity-30 mx-auto mb-3" />
                 <p className="opacity-50">
                   {(categoryFilter || severityFilter || logSearch) ? 'No events match your filters' : 'No events recorded for this session'}
                 </p>
+              </div>
+            ) : logViewMode === 'paired' ? (
+              <div>
+                {pairedLogEvents.map((pair) => (
+                  <PairedEventCard
+                    key={pair.key}
+                    pair={pair}
+                    showSession={false}
+                  />
+                ))}
               </div>
             ) : (
               <div className="divide-y divide-carbon/[0.06]">
@@ -518,14 +573,14 @@ export default function SessionDetail() {
                 </p>
                 <div className="flex items-center gap-2">
                   <button
-                    className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none"
                     disabled={eventsPage === 1}
                     onClick={() => setEventsPage((p) => p - 1)}
                   >
                     Previous
                   </button>
                   <button
-                    className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none"
                     disabled={eventsPage >= eventsData.pages}
                     onClick={() => setEventsPage((p) => p + 1)}
                   >
@@ -594,7 +649,7 @@ export default function SessionDetail() {
               </div>
             ) : events.length === 0 ? (
               <div className="p-12 text-center">
-                <Activity className="w-12 h-12 opacity-20 mx-auto mb-3" />
+                <Activity className="w-12 h-12 opacity-30 mx-auto mb-3" />
                 <p className="opacity-50">No events match your filters</p>
               </div>
             ) : (
@@ -614,14 +669,14 @@ export default function SessionDetail() {
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                  className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none"
                   disabled={eventsPage === 1}
                   onClick={() => setEventsPage((p) => p - 1)}
                 >
                   Previous
                 </button>
                 <button
-                  className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                  className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none"
                   disabled={eventsPage >= eventsData.pages}
                   onClick={() => setEventsPage((p) => p + 1)}
                 >
@@ -651,7 +706,7 @@ export default function SessionDetail() {
             </div>
           ) : alerts.length === 0 ? (
             <div className="p-12 text-center">
-              <AlertTriangle className="w-12 h-12 opacity-20 mx-auto mb-3" />
+              <AlertTriangle className="w-12 h-12 opacity-30 mx-auto mb-3" />
               <p className="opacity-50">No alerts for this session</p>
             </div>
           ) : (
@@ -687,7 +742,7 @@ export default function SessionDetail() {
             </div>
           ) : aggregatedFileEvents.length === 0 ? (
             <div className="p-12 text-center">
-              <FileText className="w-12 h-12 opacity-20 mx-auto mb-3" />
+              <FileText className="w-12 h-12 opacity-30 mx-auto mb-3" />
               <p className="opacity-50">No file operations recorded</p>
             </div>
           ) : (
@@ -723,7 +778,7 @@ export default function SessionDetail() {
             </div>
           ) : aggregatedCommandEvents.length === 0 ? (
             <div className="p-12 text-center">
-              <Terminal className="w-12 h-12 opacity-20 mx-auto mb-3" />
+              <Terminal className="w-12 h-12 opacity-30 mx-auto mb-3" />
               <p className="opacity-50">No commands executed</p>
             </div>
           ) : (
@@ -759,7 +814,7 @@ export default function SessionDetail() {
             </div>
           ) : aggregatedNetworkEvents.length === 0 ? (
             <div className="p-12 text-center">
-              <Globe className="w-12 h-12 opacity-20 mx-auto mb-3" />
+              <Globe className="w-12 h-12 opacity-30 mx-auto mb-3" />
               <p className="opacity-50">No network requests recorded</p>
             </div>
           ) : (

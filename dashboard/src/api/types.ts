@@ -63,6 +63,10 @@ export interface Event {
   timestamp: string;
   hook_type: string;
   tool_name: string | null;
+  /** Stable per-call identifier from Claude Code. Pre/Post/Failure of one call share this. */
+  tool_use_id?: string | null;
+  /** True when AgentsLeak's PreToolUse decision denied this call. */
+  blocked?: boolean;
   category: string;
   severity: string;
   file_paths: string[];
@@ -111,10 +115,19 @@ export interface AlertEvidence {
 
 export interface AlertContextEvent {
   id: string;
+  session_id: string;
   timestamp: string;
+  hook_type: string;
   tool_name: string;
+  tool_use_id?: string | null;
+  blocked?: boolean;
   category: string;
   severity: string;
+  file_paths?: string[];
+  commands?: string[];
+  urls?: string[];
+  tool_input?: Record<string, unknown> | null;
+  tool_result?: Record<string, unknown> | null;
   description: string;
   is_trigger: boolean;
 }

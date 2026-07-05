@@ -697,6 +697,8 @@ class Engine:
             "timestamp": event.timestamp.isoformat(),
             "hook_type": event.hook_type,
             "tool_name": event.tool_name,
+            "tool_use_id": event.tool_use_id,
+            "blocked": event.blocked,
             "tool_input": event.tool_input,
             "tool_result": event.tool_result,
             "category": event.category.value if hasattr(event.category, "value") else str(event.category),

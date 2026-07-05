@@ -51,7 +51,7 @@ function CustomTooltip({ active, payload, label, interval }: CustomTooltipProps)
   const formatted = ts ? formatTimestamp(ts, interval) : label;
 
   return (
-    <div className="bg-carbon text-white text-xs px-3 py-2 border border-carbon shadow-[3px_3px_0px_rgba(0,0,0,0.3)]">
+    <div className="bg-[#1A1A1A] dark:bg-[#1e1e1e] text-white text-xs px-3 py-2 rounded-lg border border-[#1A1A1A] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
       <p className="font-mono opacity-60 mb-1">{formatted}</p>
       {payload.map((entry: TooltipEntry) => (
         <p key={entry.name} className="flex items-center gap-2">
@@ -71,7 +71,7 @@ export default function EventsOverTime({ data, isLoading, interval }: EventsOver
   const isDark = useDarkMode();
   const line = isDark ? '#ececec' : '#1A1A1A';
   const muted = isDark ? '#888888' : '#1A1A1A';
-  const surface = isDark ? '#161616' : '#fff';
+  const surface = isDark ? '#0C0C0C' : '#fff';
 
   const chartData = useMemo(() => {
     if (!data?.points?.length) return [];

@@ -62,30 +62,30 @@ const RISK_STYLES: Record<ToolRisk, {
   label: string;
 }> = {
   critical: {
-    bg: 'bg-[#D90429]',
-    border: 'border-[#D90429]',
-    shadow: 'shadow-[3px_3px_0px_#1A1A1A]',
+    bg: 'bg-risk-critical',
+    border: 'border-risk-critical',
+    shadow: 'shadow-brutal',
     text: 'text-white',
     label: 'EXEC',
   },
   high: {
-    bg: 'bg-[#C4516C]',
-    border: 'border-[#C4516C]',
-    shadow: 'shadow-[3px_3px_0px_#1A1A1A]',
+    bg: 'bg-risk-high',
+    border: 'border-risk-high',
+    shadow: 'shadow-brutal',
     text: 'text-white',
     label: 'NET',
   },
   medium: {
-    bg: 'bg-[#1A1A1A]',
-    border: 'border-[#1A1A1A]',
-    shadow: 'shadow-[3px_3px_0px_#8B8B8B]',
+    bg: 'bg-carbon',
+    border: 'border-carbon',
+    shadow: 'shadow-brutal-soft',
     text: 'text-white',
     label: 'WRITE',
   },
   low: {
-    bg: 'bg-[#F4F4F4]',
-    border: 'border-[#8B8B8B]',
-    shadow: 'shadow-[3px_3px_0px_#8B8B8B]',
+    bg: 'bg-tint-neutral',
+    border: 'border-risk-medium',
+    shadow: 'shadow-brutal-soft',
     text: 'text-carbon',
     label: 'READ',
   },
@@ -102,17 +102,17 @@ function ToolNode({ data, selected }: NodeProps<ToolNodeData>) {
         'relative px-3 py-2 min-w-[100px] max-w-[160px] rounded-md',
         'border-2 transition-all duration-200',
         style.bg, style.border, style.shadow,
-        selected && 'ring-2 ring-[#D90429]',
+        selected && 'ring-2 ring-risk-critical',
         'cursor-pointer',
         risk === 'low'
-          ? 'hover:border-[#1A1A1A] hover:shadow-[3px_3px_0px_#1A1A1A]'
-          : 'hover:shadow-[4px_4px_0px_#1A1A1A]',
+          ? 'hover:border-carbon hover:shadow-brutal'
+          : 'hover:shadow-brutal-lg',
       )}
       title={`Tool: ${data.toolName} (${risk} risk)`}
     >
       {/* Alert indicator */}
       {data.alertCount > 0 && (
-        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#D90429] border-2 border-white rounded-full flex items-center justify-center">
+        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-risk-critical border-2 border-white rounded-full flex items-center justify-center">
           <span className="text-[7px] font-bold text-white">{data.alertCount}</span>
         </div>
       )}
@@ -129,7 +129,7 @@ function ToolNode({ data, selected }: NodeProps<ToolNodeData>) {
             {data.toolName}
           </div>
           <div className={cn(
-            'text-[8px] font-mono mt-0.5',
+            'text-[10px] font-mono mt-0.5',
             risk === 'low' ? 'opacity-40' : 'opacity-70',
             style.text,
           )}>
@@ -143,20 +143,20 @@ function ToolNode({ data, selected }: NodeProps<ToolNodeData>) {
         type="target"
         position={Position.Left}
         className={cn(
-          '!w-2.5 !h-2.5 !border-2',
-          risk === 'critical' ? '!bg-[#D90429] !border-white' :
-          risk === 'high' ? '!bg-[#C4516C] !border-white' :
-          '!bg-carbon !border-white'
+          '!w-2.5 !h-2.5 !border-2 !border-white',
+          risk === 'critical' ? '!bg-risk-critical' :
+          risk === 'high' ? '!bg-risk-high' :
+          '!bg-carbon'
         )}
       />
       <Handle
         type="source"
         position={Position.Right}
         className={cn(
-          '!w-2.5 !h-2.5 !border-2',
-          risk === 'critical' ? '!bg-[#D90429] !border-white' :
-          risk === 'high' ? '!bg-[#C4516C] !border-white' :
-          '!bg-carbon !border-white'
+          '!w-2.5 !h-2.5 !border-2 !border-white',
+          risk === 'critical' ? '!bg-risk-critical' :
+          risk === 'high' ? '!bg-risk-high' :
+          '!bg-carbon'
         )}
       />
     </div>

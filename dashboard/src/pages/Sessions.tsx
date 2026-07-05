@@ -178,7 +178,7 @@ export default function Sessions() {
       {/* Error State */}
       {isError && (
         <div className="card p-6">
-          <div className="flex items-center gap-3 text-red-400">
+          <div className="flex items-center gap-3 text-alert-red">
             <AlertTriangle className="w-5 h-5" />
             <p>Failed to load sessions: {(error as Error)?.message || 'Unknown error'}</p>
           </div>
@@ -193,9 +193,9 @@ export default function Sessions() {
 
       {/* Sessions Table */}
       {!isError && (
-        <div className="card overflow-hidden">
-          {/* Table Header */}
-          <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-carbon/10 text-[10px] font-mono uppercase tracking-wider font-bold opacity-50 bg-carbon/[0.03]">
+        <div className="card">
+          {/* Table Header — sticks to the top of the scroll area */}
+          <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-carbon/10 text-[10px] font-mono uppercase tracking-wider font-bold text-carbon/50 dark:text-white/40 bg-[#F1F1F3] dark:bg-[#141414] sticky top-0 z-10 rounded-t-2xl">
             <div className="col-span-2">Session</div>
             <div className="col-span-2">Endpoint</div>
             <div className="col-span-1">Source</div>
@@ -208,7 +208,7 @@ export default function Sessions() {
           </div>
 
           {/* Table Body */}
-          <div className="divide-y divide-carbon/10">
+          <div className="divide-y divide-carbon/10 overflow-hidden rounded-b-2xl">
             {isLoading ? (
               [...Array(5)].map((_, i) => <SessionCardSkeleton key={i} />)
             ) : filteredSessions.length === 0 ? (
@@ -248,14 +248,14 @@ export default function Sessions() {
           </p>
           <div className="flex items-center gap-2">
             <button
-              className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none"
               disabled={page === 1 || isFetching}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
               Previous
             </button>
             <button
-              className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              className="rounded-full bg-carbon/[0.06] hover:bg-carbon/[0.12] px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none"
               disabled={!hasMore || isFetching}
               onClick={() => setPage((p) => p + 1)}
             >

@@ -2,9 +2,11 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity,
+  ArrowUpRight,
   AlertTriangle,
   Layers,
   ShieldX,
+  ShieldCheck,
   Monitor,
   X,
   FileText,
@@ -142,16 +144,16 @@ function baseName(fp: string): string {
 
 // ── Category colors (monochrome + red for command_exec) ──────────────
 
-const CATEGORY_COLORS: Record<string, { light: string; dark: string; bar: string; barDark: string }> = {
-  command_exec:     { light: '#D90429', dark: '#D90429',  bar: 'bg-[#D90429]',  barDark: 'bg-[#D90429]' },
-  file_read:        { light: '#1A1A1A', dark: '#ececec',  bar: 'bg-[#1A1A1A]',  barDark: 'bg-[#ececec]' },
-  file_write:       { light: '#555555', dark: '#aaaaaa',  bar: 'bg-[#555555]',  barDark: 'bg-[#aaaaaa]' },
-  network_access:   { light: '#888888', dark: '#777777',  bar: 'bg-[#888888]',  barDark: 'bg-[#777777]' },
-  code_execution:   { light: '#b0b0b0', dark: '#555555',  bar: 'bg-[#b0b0b0]',  barDark: 'bg-[#555555]' },
-  file_delete:      { light: '#d0d0d0', dark: '#3a3a3a',  bar: 'bg-[#d0d0d0]',  barDark: 'bg-[#3a3a3a]' },
-  subagent_spawn:   { light: '#e8e8e8', dark: '#2a2a2a',  bar: 'bg-[#e8e8e8]',  barDark: 'bg-[#2a2a2a]' },
-  mcp_tool_use:     { light: '#e0e0e0', dark: '#333333',  bar: 'bg-[#e0e0e0]',  barDark: 'bg-[#333333]' },
-  session_lifecycle: { light: '#eeeeee', dark: '#222222', bar: 'bg-[#eeeeee]',  barDark: 'bg-[#222222]' },
+const CATEGORY_COLORS: Record<string, { light: string; dark: string }> = {
+  command_exec:      { light: '#D90429', dark: '#D90429' },
+  file_read:         { light: '#1A1A1A', dark: '#ececec' },
+  file_write:        { light: '#555555', dark: '#aaaaaa' },
+  network_access:    { light: '#888888', dark: '#777777' },
+  code_execution:    { light: '#b0b0b0', dark: '#555555' },
+  file_delete:       { light: '#d0d0d0', dark: '#3a3a3a' },
+  subagent_spawn:    { light: '#e8e8e8', dark: '#2a2a2a' },
+  mcp_tool_use:      { light: '#e0e0e0', dark: '#333333' },
+  session_lifecycle: { light: '#eeeeee', dark: '#222222' },
 };
 
 /** Build SVG donut segments from sorted category data. */
@@ -181,35 +183,98 @@ function buildDonutSegments(
 
 // ── Components ───────────────────────────────────────────────────────
 
-interface StatCardProps {
+interface MetricTileProps {
   title: string;
   value: string | number;
   icon: React.ElementType;
+  to: string;
   isLoading?: boolean;
+  accent?: boolean;
+  sub?: React.ReactNode;
 }
 
-const statCardStyles: Record<string, { iconBg: string; iconColor: string; valueColor: string }> = {
-  'Active Sessions': { iconBg: 'bg-green-500/[0.12]', iconColor: 'text-green-500', valueColor: 'text-green-600' },
-  'Total Events': { iconBg: 'bg-carbon/[0.08]', iconColor: 'text-carbon/60', valueColor: 'text-carbon' },
-  'Alerts': { iconBg: 'bg-amber-500/[0.12]', iconColor: 'text-amber-500', valueColor: 'text-severity-medium' },
-  'Blocked Actions': { iconBg: 'bg-[#D90429]/[0.12]', iconColor: 'text-[#D90429]', valueColor: 'text-severity-critical' },
-  'Endpoints': { iconBg: 'bg-carbon/[0.08]', iconColor: 'text-carbon/60', valueColor: 'text-carbon' },
-};
+function MetricTile({ title, value, icon: Icon, to, isLoading, accent, sub }: MetricTileProps) {
+  return (
+    <Link
+      to={to}
+      className="card p-4 block group relative transition-transform duration-200 hover:-translate-y-1 active:translate-y-0"
+    >
+      <ArrowUpRight className="absolute top-3.5 right-3.5 w-4 h-4 text-carbon/20 dark:text-white/20 group-hover:text-alert-red transition-colors" />
+      <div className="flex items-center gap-2 text-carbon/45 dark:text-white/40">
+        <Icon className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-mono font-bold uppercase tracking-wider">{title}</span>
+      </div>
+      {isLoading ? (
+        <div className="h-8 w-20 bg-carbon/10 rounded mt-2.5 animate-pulse" />
+      ) : (
+        <p
+          className={cn(
+            'text-[32px] leading-none font-display font-bold mt-2.5 tabular-nums',
+            accent ? 'text-alert-red' : 'text-carbon dark:text-white',
+          )}
+        >
+          {value}
+        </p>
+      )}
+      {sub && (
+        <p className="text-[11px] font-mono mt-2 text-carbon/50 dark:text-white/40">{sub}</p>
+      )}
+    </Link>
+  );
+}
 
-function StatCard({ title, value, icon: Icon, isLoading }: StatCardProps) {
-  const style = statCardStyles[title] || statCardStyles['Total Events'];
+function ThreatBanner({
+  critical,
+  total,
+  isLoading,
+}: {
+  critical: number;
+  total: number;
+  isLoading?: boolean;
+}) {
+  if (isLoading) {
+    return <div className="card h-[72px] animate-pulse" />;
+  }
+  if (critical > 0) {
+    return (
+      <Link
+        to="/alerts?severity=critical"
+        className="card p-4 flex items-center gap-4 border-l-4 border-l-alert-red hover:-translate-y-px transition-transform"
+      >
+        <div className="w-9 h-9 rounded-lg bg-alert-red/[0.1] flex items-center justify-center flex-shrink-0">
+          <AlertTriangle className="w-[18px] h-[18px] text-alert-red" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-display font-bold text-[15px] text-carbon dark:text-white">
+            <span className="text-alert-red">
+              {critical} critical alert{critical > 1 ? 's' : ''}
+            </span>{' '}
+            need review
+          </p>
+          <p className="text-[11px] font-mono text-carbon/50 dark:text-white/40 mt-0.5">
+            unresolved threats detected across your monitored agents
+          </p>
+        </div>
+        <span className="font-display font-bold text-xs uppercase tracking-wide bg-alert-red text-white rounded-lg px-4 py-2.5 flex-shrink-0">
+          Triage now →
+        </span>
+      </Link>
+    );
+  }
   return (
     <div className="card p-4 flex items-center gap-3">
-      <div className={cn('w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0', style.iconBg)}>
-        <Icon className={cn('w-5 h-5', style.iconColor)} />
+      <div className="w-9 h-9 rounded-lg bg-carbon/[0.06] dark:bg-white/[0.06] flex items-center justify-center flex-shrink-0">
+        <ShieldCheck className="w-[18px] h-[18px] text-carbon/50 dark:text-white/45" />
       </div>
       <div>
-        {isLoading ? (
-          <div className="h-7 w-16 bg-carbon/10 rounded animate-pulse" />
-        ) : (
-          <p className={cn('text-xl font-bold', style.valueColor)}>{value}</p>
-        )}
-        <p className="text-[10px] font-mono opacity-40 uppercase">{title}</p>
+        <p className="font-display font-bold text-[15px] text-carbon dark:text-white">
+          {total > 0 ? 'No critical alerts' : 'All clear'}
+        </p>
+        <p className="text-[11px] font-mono text-carbon/50 dark:text-white/40 mt-0.5">
+          {total > 0
+            ? `${total} alert${total > 1 ? 's' : ''} logged · none at critical severity`
+            : 'no threats detected across your monitored agents'}
+        </p>
       </div>
     </div>
   );
@@ -231,6 +296,17 @@ function severityBadge(severity: string): string {
     case 'medium': return 'badge badge-medium';
     case 'low': return 'badge badge-low';
     default: return 'badge badge-info';
+  }
+}
+
+/** Left-border accent colour for an event/alert row, by severity.
+   `!` beats the global `html.dark *` border-color reset. */
+function severityBorderClass(severity: string): string {
+  switch (severity) {
+    case 'critical': return '!border-l-risk-critical';
+    case 'high': return '!border-l-risk-high';
+    case 'medium': return '!border-l-risk-medium';
+    default: return '!border-l-transparent';
   }
 }
 
@@ -300,12 +376,12 @@ export default function Dashboard() {
   const filterLabel = endpoints.find(e => e.hostname === endpointFilter)?.label || endpointFilter;
 
   return (
-    <div className="space-y-8">
-      {/* Global Endpoint Scope Selector */}
+    <div className="space-y-6">
+      {/* Endpoint scope selector */}
       {endpoints.length > 0 && (
-        <div className="flex items-center gap-3">
+        <div className="flex justify-end">
           <div className="relative">
-            <Monitor className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
+            <Monitor className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-carbon/40 dark:text-white/35" />
             <select
               value={endpointFilter}
               onChange={(e) => setEndpointFilter(e.target.value)}
@@ -321,7 +397,7 @@ export default function Dashboard() {
             {isFiltered && (
               <button
                 onClick={() => setEndpointFilter('all')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-100 hover:text-alert-red"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-carbon/40 hover:text-alert-red"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -330,37 +406,49 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
-        <StatCard
+      {/* Threat banner — lead with what needs attention */}
+      <ThreatBanner
+        critical={stats?.alerts_by_severity?.critical ?? 0}
+        total={stats?.total_alerts ?? 0}
+        isLoading={statsLoading}
+      />
+
+      {/* Metric tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricTile
           title="Active Sessions"
           value={stats?.active_sessions ?? 0}
           icon={Layers}
+          to="/sessions"
           isLoading={statsLoading}
         />
-        <StatCard
-          title="Total Events"
+        <MetricTile
+          title="Events"
           value={stats?.total_events?.toLocaleString() ?? '0'}
           icon={Activity}
+          to="/live"
           isLoading={statsLoading}
         />
-        <StatCard
+        <MetricTile
           title="Alerts"
           value={stats?.total_alerts ?? 0}
           icon={AlertTriangle}
+          to="/alerts"
           isLoading={statsLoading}
+          accent={(stats?.total_alerts ?? 0) > 0}
+          sub={
+            (stats?.alerts_by_severity?.critical ?? 0) > 0
+              ? `${stats?.alerts_by_severity?.critical} at critical severity`
+              : undefined
+          }
         />
-        <StatCard
+        <MetricTile
           title="Blocked Actions"
           value={stats?.blocked_actions ?? 0}
           icon={ShieldX}
+          to="/alerts"
           isLoading={statsLoading}
-        />
-        <StatCard
-          title="Endpoints"
-          value={stats?.endpoint_count ?? 0}
-          icon={Monitor}
-          isLoading={statsLoading}
+          sub="stopped before execution"
         />
       </div>
 
@@ -402,7 +490,7 @@ export default function Dashboard() {
             </div>
           ) : groupedEvents.length === 0 ? (
             <div className="p-12 text-center">
-              <Activity className="w-12 h-12 opacity-20 mx-auto mb-3" />
+              <Activity className="w-12 h-12 opacity-30 mx-auto mb-3" />
               <p className="opacity-50 font-display">
                 {isFiltered ? `No events from ${filterLabel}` : 'No events recorded'}
               </p>
@@ -434,7 +522,7 @@ export default function Dashboard() {
                 const extraCount = details.length - MAX_DETAIL_LINES;
 
                 return (
-                  <div key={group.key} className="px-4 py-3 hover:bg-carbon/[0.02] transition-colors">
+                  <div key={group.key} className={cn('px-4 py-3 border-l-[3px] hover:bg-carbon/[0.02] transition-colors', severityBorderClass(group.severity))}>
                     <div className="flex items-start justify-between gap-3">
                       {/* Left: icon + content */}
                       <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -652,7 +740,7 @@ export default function Dashboard() {
             </div>
           ) : activeSessions.length === 0 ? (
             <div className="p-12 text-center">
-              <Layers className="w-10 h-10 opacity-20 mx-auto mb-2" />
+              <Layers className="w-10 h-10 opacity-30 mx-auto mb-2" />
               <p className="opacity-40 text-sm font-mono">
                 {isFiltered ? `No active sessions for ${filterLabel}` : 'No active sessions'}
               </p>
@@ -667,7 +755,7 @@ export default function Dashboard() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-carbon/45 dark:bg-white/45 animate-pulse flex-shrink-0" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-mono font-bold text-carbon truncate group-hover:text-alert-red transition-colors">
@@ -749,7 +837,7 @@ export default function Dashboard() {
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <span className="text-xl font-bold text-carbon">{total.toLocaleString()}</span>
-                        <span className="text-[9px] font-mono opacity-40 uppercase">events</span>
+                        <span className="text-[10px] font-mono opacity-40 uppercase">events</span>
                       </div>
                     </div>
 
@@ -867,7 +955,7 @@ export default function Dashboard() {
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <span className="text-xl font-bold text-carbon">{total.toLocaleString()}</span>
-                      <span className="text-[9px] font-mono opacity-40 uppercase">sessions</span>
+                      <span className="text-[10px] font-mono opacity-40 uppercase">sessions</span>
                     </div>
                   </div>
 

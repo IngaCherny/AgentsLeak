@@ -89,10 +89,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
     """Authentication middleware for AgentsLeak.
 
-    Two independent auth mechanisms:
+    Three independent auth mechanisms:
     1. Collector auth: AGENTSLEAK_API_KEY protects /api/collect/* endpoints
        via X-AgentsLeak-Key header.
-    2. Dashboard auth: AGENTSLEAK_DASHBOARD_TOKEN protects all other /api/*
+    2. Admin write-protection: AGENTSLEAK_ADMIN_TOKEN keeps reads open for
+       everyone (so the dashboard and the Arsenal demo work without a token)
+       but requires Authorization: Bearer <token> for any mutating request
+       (POST/PUT/PATCH/DELETE) to /api/*. /api/collect/* is exempt — that is
+       demo event ingestion, not an edit. Use this for the Arsenal booth.
+    3. Dashboard auth: AGENTSLEAK_DASHBOARD_TOKEN protects all other /api/*
        routes via Authorization: Bearer <token> header. WebSocket connections
        pass the token as a ?token= query parameter.
     """
@@ -110,6 +115,24 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
                     content={"detail": "Invalid or missing API key"},
                 )
             return await call_next(request)
+
+        # --- Admin write-protection (edits require the admin token) ---
+        # Reads stay open so anyone can view the dashboard and the demo runs
+        # without a token; only mutating requests need AGENTSLEAK_ADMIN_TOKEN.
+        admin_token = os.environ.get("AGENTSLEAK_ADMIN_TOKEN")
+        if (
+            admin_token
+            and path.startswith("/api/")
+            and not path.startswith("/api/collect/")
+            and request.method in ("POST", "PUT", "PATCH", "DELETE")
+        ):
+            auth_header = request.headers.get("Authorization", "")
+            provided = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+            if not provided or not hmac.compare_digest(provided, admin_token):
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Editing requires the AgentsLeak admin token"},
+                )
 
         # --- Dashboard auth (API + WebSocket) ---
         dashboard_token = os.environ.get("AGENTSLEAK_DASHBOARD_TOKEN")
@@ -220,6 +243,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "total_alerts": db.get_alert_count(),
             "new_alerts": db.get_alert_count(status="new"),
         }
+
+    # Black Hat Arsenal interactive demo — the "Red-Team Arcade" phone page.
+    # Registered before the SPA catch-all so /arsenal is not swallowed by it.
+    _arsenal_dir = Path(__file__).parent / "arsenal"
+    _arsenal_file = _arsenal_dir / "index.html"
+
+    @app.get("/arsenal")
+    async def arsenal_console() -> FileResponse:
+        """Serve the Arsenal interactive attack console (mobile web page)."""
+        if not _arsenal_file.is_file():
+            raise HTTPException(status_code=404, detail="Arsenal demo not found")
+        # No-cache so iterating on the page is always reflected on reload.
+        return FileResponse(
+            str(_arsenal_file),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+
+    # Self-hosted brand fonts for the Arsenal page (offline-capable, no CDN).
+    _arsenal_assets = _arsenal_dir / "assets"
+    if _arsenal_assets.is_dir():
+        app.mount(
+            "/arsenal-assets",
+            StaticFiles(directory=str(_arsenal_assets)),
+            name="arsenal-assets",
+        )
 
     # Mount static files for dashboard (if exists)
     dashboard_path = Path(__file__).parent.parent / "dashboard" / "dist"

@@ -26,14 +26,15 @@ import { cn } from '@/lib/utils';
 import { usePolicies, useTogglePolicy, useDeletePolicy, useCreatePolicy, usePolicyAssistantStatus } from '@/api/queries';
 import type { Policy } from '@/api/types';
 import PolicyAssistant from '@/components/policies/PolicyAssistant';
+import { StatTile } from '@/components/common/StatTile';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const sevStyle = (sev: string) => {
   switch (sev) {
-    case 'critical': return 'text-severity-critical';
-    case 'high': return 'text-severity-high';
-    case 'medium': return 'text-severity-medium';
+    case 'critical': return 'text-risk-critical';
+    case 'high': return 'text-risk-high';
+    case 'medium': return 'text-risk-medium';
     default: return 'opacity-50';
   }
 };
@@ -50,18 +51,18 @@ function ConditionRules({ policy }: { policy: Policy }) {
   const connector = policy.condition_logic === 'any' ? 'OR' : 'AND';
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[9px] font-mono font-semibold uppercase tracking-wider opacity-40">
+      <span className="text-[10px] font-mono font-semibold uppercase tracking-wider opacity-40">
         {policy.condition_logic === 'any' ? 'Any' : 'All'} must match
       </span>
       {policy.conditions.map((c, i) => (
         <div key={i}>
           <div className="flex items-center gap-2 bg-carbon/[0.03] dark:bg-white/[0.03] rounded-lg px-3 py-2">
             <span className="text-[11px] font-mono font-semibold text-carbon dark:text-white whitespace-nowrap">{c.field}</span>
-            <span className="text-[9px] font-mono font-medium text-white bg-carbon dark:bg-white/20 dark:text-white/80 rounded px-1.5 py-0.5 whitespace-nowrap">{c.operator}</span>
+            <span className="text-[10px] font-mono font-medium text-white bg-carbon dark:bg-white/20 dark:text-white/80 rounded px-1.5 py-0.5 whitespace-nowrap">{c.operator}</span>
             <span className="text-[11px] font-mono font-medium text-alert-red break-all">{typeof c.value === 'string' ? c.value : JSON.stringify(c.value)}</span>
           </div>
           {i < policy.conditions.length - 1 && (
-            <p className="text-[9px] font-mono font-bold text-carbon/25 dark:text-white/20 text-center tracking-wider py-0.5">{connector}</p>
+            <p className="text-[10px] font-mono font-bold text-carbon/25 dark:text-white/20 text-center tracking-wider py-0.5">{connector}</p>
           )}
         </div>
       ))}
@@ -78,43 +79,11 @@ function StatsCards({ policies }: { policies: Policy[] }) {
   const enabledCount = policies.filter(p => p.enabled).length;
 
   return (
-    <div className="grid grid-cols-4 gap-3">
-      <div className="card p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-[10px] bg-carbon/[0.08] flex items-center justify-center">
-          <Shield className="w-5 h-5 text-carbon/60" />
-        </div>
-        <div>
-          <p className="text-xl font-bold text-carbon">{total}</p>
-          <p className="text-[10px] font-mono opacity-40 uppercase">Total Rules</p>
-        </div>
-      </div>
-      <div className="card p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-[10px] bg-[#D90429]/[0.12] flex items-center justify-center">
-          <ShieldOff className="w-5 h-5 text-[#D90429]" />
-        </div>
-        <div>
-          <p className="text-xl font-bold text-severity-critical">{blockCount}</p>
-          <p className="text-[10px] font-mono opacity-40 uppercase">Block Rules</p>
-        </div>
-      </div>
-      <div className="card p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-[10px] bg-amber-500/[0.12] flex items-center justify-center">
-          <AlertTriangle className="w-5 h-5 text-amber-500" />
-        </div>
-        <div>
-          <p className="text-xl font-bold text-severity-medium">{alertCount}</p>
-          <p className="text-[10px] font-mono opacity-40 uppercase">Alert Rules</p>
-        </div>
-      </div>
-      <div className="card p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-[10px] bg-green-500/[0.12] flex items-center justify-center">
-          <Eye className="w-5 h-5 text-green-500" />
-        </div>
-        <div>
-          <p className="text-xl font-bold text-green-600">{enabledCount}</p>
-          <p className="text-[10px] font-mono opacity-40 uppercase">Active</p>
-        </div>
-      </div>
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatTile title="Total Rules" value={total} icon={Shield} />
+      <StatTile title="Block Rules" value={blockCount} icon={ShieldOff} accent={blockCount > 0} />
+      <StatTile title="Alert Rules" value={alertCount} icon={AlertTriangle} />
+      <StatTile title="Active" value={enabledCount} icon={Eye} />
     </div>
   );
 }
@@ -140,9 +109,9 @@ function PolicyRow({ policy, onToggle, onDelete, isToggling, isDeleting }: Polic
         className="px-4 py-3 flex items-center gap-4 cursor-pointer hover:bg-carbon/[0.02] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <ChevronRight className={cn('w-3.5 h-3.5 opacity-30 transition-transform flex-shrink-0', expanded && 'rotate-90')} />
+        <ChevronRight className={cn('w-3.5 h-3.5 opacity-40 transition-transform flex-shrink-0', expanded && 'rotate-90')} />
 
-        <CatIcon className="w-4 h-4 opacity-30 flex-shrink-0" />
+        <CatIcon className="w-4 h-4 opacity-40 flex-shrink-0" />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -163,12 +132,12 @@ function PolicyRow({ policy, onToggle, onDelete, isToggling, isDeleting }: Polic
           {(policy.hit_count ?? 0) > 0 ? (
             <Link
               to={`/alerts?rule_id=${policy.id}`}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-severity-critical/10 text-severity-critical hover:bg-severity-critical/20 transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-risk-critical/10 text-risk-critical hover:bg-risk-critical/20 transition-colors"
             >
               {policy.hit_count} {policy.hit_count === 1 ? 'hit' : 'hits'}
             </Link>
           ) : (
-            <span className="text-[11px] font-mono opacity-20 px-2">0 hits</span>
+            <span className="text-[11px] font-mono opacity-30 px-2">0 hits</span>
           )}
         </div>
 
@@ -181,12 +150,12 @@ function PolicyRow({ policy, onToggle, onDelete, isToggling, isDeleting }: Polic
             {isToggling ? (
               <Loader2 className="w-5 h-5 opacity-40 animate-spin" />
             ) : policy.enabled ? (
-              <ToggleRight className="w-5 h-5 text-green-600" />
+              <ToggleRight className="w-5 h-5 text-carbon dark:text-white" />
             ) : (
-              <ToggleLeft className="w-5 h-5 opacity-30" />
+              <ToggleLeft className="w-5 h-5 opacity-40" />
             )}
           </button>
-          <button className="p-1 hover:bg-carbon/[0.04] transition-colors opacity-30 hover:opacity-100 hover:text-alert-red">
+          <button className="p-1 hover:bg-carbon/[0.04] transition-colors opacity-40 hover:opacity-100 hover:text-alert-red">
             <Edit2 className="w-3.5 h-3.5" />
           </button>
           <button
@@ -194,7 +163,7 @@ function PolicyRow({ policy, onToggle, onDelete, isToggling, isDeleting }: Polic
               if (window.confirm('Delete this policy?')) onDelete(policy.id);
             }}
             disabled={isDeleting}
-            className="p-1 hover:bg-carbon/[0.04] transition-colors opacity-30 hover:text-severity-critical"
+            className="p-1 hover:bg-carbon/[0.04] transition-colors opacity-40 hover:text-risk-critical"
           >
             {isDeleting ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -460,7 +429,7 @@ function CreatePolicyModal({ open, onClose }: CreatePolicyModalProps) {
           </div>
 
           {createMutation.isError && (
-            <div className="text-sm text-severity-critical bg-severity-critical/[0.06] rounded-lg p-2">
+            <div className="text-sm text-risk-critical bg-risk-critical/[0.06] rounded-lg p-2">
               Failed to create policy: {(createMutation.error as Error)?.message || 'Unknown error'}
             </div>
           )}
@@ -527,18 +496,18 @@ export default function Policies() {
       key: 'block',
       label: 'Block Rules',
       desc: 'These rules immediately halt dangerous operations',
-      bgClass: 'bg-severity-critical/[0.04]',
-      badgeBg: 'bg-severity-critical text-white border-severity-critical',
-      dotColor: 'bg-severity-critical',
+      bgClass: 'bg-risk-critical/[0.04]',
+      badgeBg: 'bg-risk-critical text-white border-risk-critical',
+      dotColor: 'bg-risk-critical',
       policies: filtered.filter(p => p.action === 'block'),
     },
     {
       key: 'alert',
       label: 'Alert Rules',
       desc: 'These rules flag suspicious activity for review',
-      bgClass: 'bg-severity-medium/[0.04]',
-      badgeBg: 'bg-severity-medium text-white border-severity-medium',
-      dotColor: 'bg-severity-medium',
+      bgClass: 'bg-risk-high/[0.04]',
+      badgeBg: 'bg-risk-high text-white border-risk-high',
+      dotColor: 'bg-risk-high',
       policies: filtered.filter(p => p.action === 'alert'),
     },
     {
@@ -588,7 +557,7 @@ export default function Policies() {
               className={cn(
                 'px-3.5 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-1.5',
                 activeTab === 'rules'
-                  ? 'bg-white text-carbon shadow-sm'
+                  ? 'bg-white dark:bg-white/[0.12] text-carbon dark:text-white shadow-sm'
                   : 'text-carbon/50 hover:text-carbon/70'
               )}
             >
@@ -601,7 +570,7 @@ export default function Policies() {
                 className={cn(
                   'px-3.5 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-1.5',
                   activeTab === 'assistant'
-                    ? 'bg-white text-carbon shadow-sm'
+                    ? 'bg-white dark:bg-white/[0.12] text-carbon dark:text-white shadow-sm'
                     : 'text-carbon/50 hover:text-carbon/70'
                 )}
               >

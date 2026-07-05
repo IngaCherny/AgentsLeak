@@ -6,11 +6,16 @@ import {
   Monitor,
   X,
   Cpu,
+  Layers,
+  Activity,
+  AlertTriangle,
+  ShieldX,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDarkMode } from '@/lib/useDarkMode';
 import { useStats, useTimeline, useSessions, useTopFiles, useTopCommands, useTopDomains, useEndpointStats } from '@/api/queries';
 import EventsOverTime from '@/components/charts/EventsOverTime';
+import { StatTile } from '@/components/common/StatTile';
 
 type TimeRange = '1h' | '24h' | '7d' | '30d';
 
@@ -112,52 +117,6 @@ function shortenPath(fullPath: string, maxLen = 28): string {
 function shortenCommand(cmd: string, maxLen = 28): string {
   if (cmd.length <= maxLen) return cmd;
   return cmd.slice(0, maxLen - 3) + '...';
-}
-
-const analyticsCardConfig: Record<string, { icon: React.ElementType; iconBg: string; iconColor: string; valueColor: string }> = {
-  'Total Events': { icon: TrendingUp, iconBg: 'bg-carbon/[0.08]', iconColor: 'text-carbon/60', valueColor: 'text-carbon' },
-  'Active Sessions': { icon: TrendingUp, iconBg: 'bg-green-500/[0.12]', iconColor: 'text-green-500', valueColor: 'text-green-600' },
-  'New Alerts': { icon: TrendingUp, iconBg: 'bg-amber-500/[0.12]', iconColor: 'text-amber-500', valueColor: 'text-severity-medium' },
-  'Blocked Actions': { icon: TrendingUp, iconBg: 'bg-[#D90429]/[0.12]', iconColor: 'text-[#D90429]', valueColor: 'text-severity-critical' },
-};
-
-function StatCard({
-  label,
-  value,
-  change,
-  isLoading,
-}: {
-  label: string;
-  value: string | number;
-  change?: string;
-  isLoading?: boolean;
-}) {
-  const config = analyticsCardConfig[label] || analyticsCardConfig['Total Events'];
-  const Icon = config.icon;
-  const isPositive = change?.startsWith('+');
-
-  return (
-    <div className="card p-4 flex items-center gap-3">
-      <div className={cn('w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0', config.iconBg)}>
-        <Icon className={cn('w-5 h-5', config.iconColor)} />
-      </div>
-      <div className="flex-1">
-        {isLoading ? (
-          <div className="h-7 w-16 bg-carbon/[0.04] rounded animate-pulse" />
-        ) : (
-          <div className="flex items-end justify-between">
-            <p className={cn('text-xl font-bold', config.valueColor)}>{value}</p>
-            {change && (
-              <span className={cn('text-xs font-medium', isPositive ? 'text-green-600' : 'text-severity-critical')}>
-                {change}
-              </span>
-            )}
-          </div>
-        )}
-        <p className="text-[10px] font-mono opacity-40 uppercase">{label}</p>
-      </div>
-    </div>
-  );
 }
 
 export default function Analytics() {
@@ -360,25 +319,35 @@ export default function Analytics() {
 
       {/* Summary Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard
-          label="Total Events"
+        <StatTile
+          title="Total Events"
           value={stats?.total_events?.toLocaleString() || '0'}
+          icon={Activity}
+          to="/live"
           isLoading={statsLoading}
         />
-        <StatCard
-          label="Active Sessions"
+        <StatTile
+          title="Active Sessions"
           value={stats?.active_sessions || 0}
+          icon={Layers}
+          to="/sessions"
           isLoading={statsLoading}
         />
-        <StatCard
-          label="New Alerts"
+        <StatTile
+          title="New Alerts"
           value={stats?.new_alerts || 0}
+          icon={AlertTriangle}
+          to="/alerts"
           isLoading={statsLoading}
+          accent={(stats?.new_alerts || 0) > 0}
         />
-        <StatCard
-          label="Blocked Actions"
+        <StatTile
+          title="Blocked Actions"
           value={stats?.blocked_actions || 0}
+          icon={ShieldX}
+          to="/alerts"
           isLoading={statsLoading}
+          accent={(stats?.blocked_actions || 0) > 0}
         />
       </div>
 
@@ -454,7 +423,7 @@ export default function Analytics() {
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <span className="text-xl font-bold text-carbon">{total.toLocaleString()}</span>
-                      <span className="text-[9px] font-mono opacity-40 uppercase">events</span>
+                      <span className="text-[10px] font-mono opacity-40 uppercase">events</span>
                     </div>
                   </div>
 
@@ -547,7 +516,7 @@ export default function Analytics() {
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <span className="text-xl font-bold text-carbon">{total.toLocaleString()}</span>
-                      <span className="text-[9px] font-mono opacity-40 uppercase">accesses</span>
+                      <span className="text-[10px] font-mono opacity-40 uppercase">accesses</span>
                     </div>
                   </div>
 
@@ -641,7 +610,7 @@ export default function Analytics() {
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <span className="text-xl font-bold text-carbon">{total.toLocaleString()}</span>
-                      <span className="text-[9px] font-mono opacity-40 uppercase">runs</span>
+                      <span className="text-[10px] font-mono opacity-40 uppercase">runs</span>
                     </div>
                   </div>
 
@@ -797,7 +766,7 @@ export default function Analytics() {
                               {s.events.toLocaleString()}
                             </span>
                             {s.alerts > 0 && (
-                              <span className="text-[9px] font-mono font-bold text-[#D90429] tabular-nums">
+                              <span className="text-[10px] font-mono font-bold text-[#D90429] tabular-nums">
                                 {s.alerts}!
                               </span>
                             )}

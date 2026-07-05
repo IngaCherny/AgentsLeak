@@ -22,44 +22,74 @@ export default {
           light: '#2D2D2D',
         },
         'alert-red': 'var(--alert-red)',
+        // Risk palette — single source for graph-node and inline severity coloring.
+        // Dark-mode equivalents are handled via tinted backgrounds (see tint-* below).
+        risk: {
+          // critical + high flip to the stealth-dark tones via CSS vars
+          // (RGB channels → alpha modifiers like /[0.12] keep working)
+          critical: 'rgb(var(--risk-critical) / <alpha-value>)',
+          high: 'rgb(var(--risk-high) / <alpha-value>)',
+          medium: '#8B8B8B',
+          low: '#C8C8C8',
+          // deeper text-only variants (used for labels on tinted backgrounds)
+          'high-deep': 'var(--risk-high-deep)',
+          'medium-deep': 'var(--risk-medium-deep)',
+        },
+        // Mode-aware tinted surfaces. Resolve via CSS variables so dark mode works
+        // without a parallel set of `html.dark` overrides.
+        tint: {
+          critical: 'var(--tint-critical)',
+          neutral: 'var(--tint-neutral)',
+          paper: 'var(--tint-paper)',
+        },
+        // Severity ladder — brand flow: shades of red → shades of grey.
+        // critical = full red, high = rose red, medium = grey, low = light grey.
         severity: {
           critical: {
-            DEFAULT: '#DC2626',
-            bg: '#FEE2E2',
-            border: '#FECACA',
-            text: '#991B1B',
+            DEFAULT: '#D90429',
+            bg: '#FDF2F4',
+            border: '#F2CDD4',
+            text: '#9F1239',
           },
           high: {
-            DEFAULT: '#EA580C',
-            bg: '#FFEDD5',
-            border: '#FED7AA',
-            text: '#9A3412',
+            DEFAULT: '#C4516C',
+            bg: '#FAEDF0',
+            border: '#E9CAD2',
+            text: '#9F1239',
           },
           medium: {
-            DEFAULT: '#CA8A04',
-            bg: '#FEF9C3',
-            border: '#FDE68A',
-            text: '#854D0E',
+            DEFAULT: '#8B8B8B',
+            bg: '#F3F3F3',
+            border: '#DFDFDF',
+            text: '#525252',
           },
           low: {
-            DEFAULT: '#2563EB',
-            bg: '#DBEAFE',
-            border: '#BFDBFE',
-            text: '#1E40AF',
+            DEFAULT: '#C8C8C8',
+            bg: '#F8F8F8',
+            border: '#E8E8E8',
+            text: '#9A9A9A',
           },
           info: {
-            DEFAULT: '#6B7280',
+            DEFAULT: '#9CA3AF',
             bg: '#F3F4F6',
             border: '#E5E7EB',
-            text: '#374151',
+            text: '#525252',
           },
         },
       },
       boxShadow: {
-        'brutal': '8px 8px 0px #1A1A1A',
-        'brutal-sm': '4px 4px 0px #1A1A1A',
-        'brutal-hover': '8px 8px 0px #D90429',
-        'brutal-sm-hover': '4px 4px 0px #D90429',
+        // Legacy 8px brutal shadows (header/CTA blocks)
+        'brutal-xl': '8px 8px 0px var(--brutal)',
+        'brutal-xl-accent': '8px 8px 0px var(--alert-red)',
+        // Standard 3-4px brutal shadows used by graph nodes — color flips in dark mode.
+        'brutal': '3px 3px 0px var(--brutal)',
+        'brutal-lg': '4px 4px 0px var(--brutal)',
+        'brutal-sm': '2px 2px 0px var(--brutal-soft)',
+        'brutal-soft': '3px 3px 0px var(--brutal-soft)',
+        'brutal-softer': '3px 3px 0px var(--brutal-softer)',
+        'brutal-rose': '3px 3px 0px var(--brutal-rose)',
+        'brutal-accent': '3px 3px 0px var(--alert-red)',
+        'brutal-accent-lg': '4px 4px 0px var(--alert-red)',
       },
       animation: {
         'pulse-slow': 'pulse-slow 2s ease-in-out infinite',

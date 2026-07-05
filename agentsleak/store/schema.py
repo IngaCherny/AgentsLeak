@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS events (
     processed INTEGER DEFAULT 0,
     enriched INTEGER DEFAULT 0,
     raw_payload TEXT,  -- JSON blob
+    tool_use_id TEXT,  -- Claude Code's stable ID linking Pre/Post/Failure of one call
+    blocked INTEGER DEFAULT 0,  -- 1 if AgentsLeak's PreToolUse decision denied this call
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 );

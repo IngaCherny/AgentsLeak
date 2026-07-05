@@ -89,6 +89,8 @@ class Database:
             "ALTER TABLE sessions ADD COLUMN endpoint_hostname TEXT",
             "ALTER TABLE sessions ADD COLUMN endpoint_user TEXT",
             "ALTER TABLE sessions ADD COLUMN session_source TEXT",
+            "ALTER TABLE events ADD COLUMN tool_use_id TEXT",
+            "ALTER TABLE events ADD COLUMN blocked INTEGER DEFAULT 0",
         ]
         for sql in migrations:
             try:
@@ -303,8 +305,9 @@ class Database:
                     id, session_id, timestamp, hook_type, tool_name,
                     tool_input, tool_result, category, severity,
                     file_paths, commands, urls, ip_addresses,
-                    processed, enriched, raw_payload
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    processed, enriched, raw_payload,
+                    tool_use_id, blocked
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     _uuid_to_str(event.id),
@@ -323,6 +326,8 @@ class Database:
                     1 if event.processed else 0,
                     1 if event.enriched else 0,
                     _serialize_json(event.raw_payload),
+                    event.tool_use_id,
+                    1 if event.blocked else 0,
                 ),
             )
 
@@ -413,6 +418,8 @@ class Database:
             processed=bool(row["processed"]),
             enriched=bool(row["enriched"]),
             raw_payload=_deserialize_json(row["raw_payload"]),
+            tool_use_id=row["tool_use_id"],
+            blocked=bool(row["blocked"] or 0),
         )
 
     # =========================================================================

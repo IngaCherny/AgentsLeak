@@ -15,11 +15,11 @@ export interface FileNodeData {
 
 function FileNode({ data, selected }: NodeProps<FileNodeData>) {
   const riskColors: Record<FileRisk, { border: string; bg: string; text: string }> = {
-    none: { border: 'border-[#C8C8C8]', bg: 'bg-white', text: 'text-carbon' },
-    low: { border: 'border-[#C8C8C8]', bg: 'bg-white', text: 'text-carbon' },
-    medium: { border: 'border-[#8B8B8B]', bg: 'bg-[#F4F4F4]', text: 'text-[#525252]' },
-    high: { border: 'border-[#C4516C]', bg: 'bg-[#FDF2F4]', text: 'text-[#9F1239]' },
-    critical: { border: 'border-[#D90429]', bg: 'bg-[#FDF2F4]', text: 'text-[#D90429]' },
+    none: { border: 'border-risk-low', bg: 'bg-white', text: 'text-carbon' },
+    low: { border: 'border-risk-low', bg: 'bg-white', text: 'text-carbon' },
+    medium: { border: 'border-risk-medium', bg: 'bg-tint-neutral', text: 'text-risk-medium-deep' },
+    high: { border: 'border-risk-high', bg: 'bg-tint-critical', text: 'text-risk-high-deep' },
+    critical: { border: 'border-risk-critical', bg: 'bg-tint-critical', text: 'text-risk-critical' },
   };
 
   const colors = riskColors[data.risk];
@@ -29,19 +29,19 @@ function FileNode({ data, selected }: NodeProps<FileNodeData>) {
       className={cn(
         'relative px-3 py-2 min-w-[100px] max-w-[180px] rounded-md',
         'border-2 transition-all duration-200',
-        'shadow-[3px_3px_0px_#1A1A1A]',
+        'shadow-brutal',
         colors.bg,
-        selected ? 'ring-2 ring-[#D90429] border-[#D90429]' : colors.border,
-        'cursor-pointer hover:border-[#D90429] hover:shadow-[3px_3px_0px_#D90429]'
+        selected ? 'ring-2 ring-risk-critical border-risk-critical' : colors.border,
+        'cursor-pointer hover:border-risk-critical hover:shadow-brutal-accent'
       )}
       title={data.fullPath}
     >
       {/* Risk indicator */}
       {(data.risk === 'critical' || data.risk === 'high') && (
-        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#D90429]" />
+        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-risk-critical" />
       )}
       {data.risk === 'medium' && (
-        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#8B8B8B]" />
+        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-risk-medium" />
       )}
 
       <div className="flex items-center gap-2">
@@ -50,13 +50,13 @@ function FileNode({ data, selected }: NodeProps<FileNodeData>) {
             {data.operations.length > 0 && (
               <div className="flex gap-0.5">
                 {data.operations.includes('read') && (
-                  <span className="text-[8px] px-1 py-px rounded-sm bg-[#F4F4F4] text-[#8B8B8B] font-mono font-bold">R</span>
+                  <span className="text-[10px] px-1 py-px rounded-sm bg-tint-neutral text-risk-medium font-mono font-bold">R</span>
                 )}
                 {data.operations.includes('write') && (
-                  <span className="text-[8px] px-1 py-px rounded-sm bg-carbon text-white font-mono font-bold">W</span>
+                  <span className="text-[10px] px-1 py-px rounded-sm bg-carbon text-white font-mono font-bold">W</span>
                 )}
                 {data.operations.includes('delete') && (
-                  <span className="text-[8px] px-1 py-px rounded-sm bg-[#D90429] text-white font-mono font-bold">D</span>
+                  <span className="text-[10px] px-1 py-px rounded-sm bg-risk-critical text-white font-mono font-bold">D</span>
                 )}
               </div>
             )}

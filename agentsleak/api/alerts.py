@@ -382,10 +382,19 @@ async def get_alert_context(
 
         items.append({
             "id": str(ev.id),
+            "session_id": ev.session_id,
             "timestamp": ev.timestamp.isoformat(),
+            "hook_type": ev.hook_type,
             "tool_name": ev.tool_name,
+            "tool_use_id": ev.tool_use_id,
+            "blocked": ev.blocked,
             "category": ev.category.value,
             "severity": ev.severity.value,
+            "file_paths": ev.file_paths,
+            "commands": ev.commands,
+            "urls": ev.urls,
+            "tool_input": ev.tool_input,
+            "tool_result": ev.tool_result,
             "description": desc,
             "is_trigger": str(ev.id) in trigger_ids,
         })

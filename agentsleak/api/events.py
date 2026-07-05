@@ -30,6 +30,8 @@ class EventSummary(BaseModel):
     timestamp: datetime
     hook_type: str
     tool_name: str | None
+    tool_use_id: str | None = None
+    blocked: bool = False
     category: str
     severity: str
     file_paths: list[str] = Field(default_factory=list)
@@ -45,6 +47,8 @@ class EventDetail(BaseModel):
     timestamp: datetime
     hook_type: str
     tool_name: str | None
+    tool_use_id: str | None = None
+    blocked: bool = False
     tool_input: dict[str, Any] | None
     tool_result: dict[str, Any] | None
     category: str
@@ -106,6 +110,8 @@ async def list_events(
             timestamp=e.timestamp,
             hook_type=e.hook_type,
             tool_name=e.tool_name,
+            tool_use_id=e.tool_use_id,
+            blocked=e.blocked,
             category=e.category.value,
             severity=e.severity.value,
             file_paths=e.file_paths,
@@ -143,6 +149,8 @@ async def get_event(
         timestamp=event.timestamp,
         hook_type=event.hook_type,
         tool_name=event.tool_name,
+        tool_use_id=event.tool_use_id,
+        blocked=event.blocked,
         tool_input=event.tool_input,
         tool_result=event.tool_result,
         category=event.category.value,

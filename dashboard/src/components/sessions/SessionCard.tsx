@@ -33,9 +33,9 @@ export { SourceBadge };
 
 const statusStyles: Record<string, { bg: string; text: string; border: string; label: string }> = {
   active: {
-    bg: 'bg-green-50',
-    text: 'text-green-600',
-    border: 'border-green-200',
+    bg: 'bg-carbon/[0.05] dark:bg-white/[0.06]',
+    text: 'text-carbon/65 dark:text-white/60',
+    border: 'border-carbon/15 dark:border-white/15',
     label: 'Active',
   },
   ended: {
@@ -46,11 +46,11 @@ const statusStyles: Record<string, { bg: string; text: string; border: string; l
   },
 };
 
-function getRiskLevel(riskScore: number): { color: string; label: string; value: number } {
-  if (riskScore <= 10) return { color: 'text-green-500', label: 'Low', value: riskScore };
-  if (riskScore <= 50) return { color: 'text-yellow-500', label: 'Medium', value: riskScore };
-  if (riskScore <= 150) return { color: 'text-orange-500', label: 'High', value: riskScore };
-  return { color: 'text-severity-critical', label: 'Critical', value: riskScore };
+function getRiskLevel(riskScore: number): { color: string; label: string; value: number; border: string } {
+  if (riskScore <= 10) return { color: 'text-carbon/45 dark:text-white/40', label: 'Low', value: riskScore, border: '!border-l-transparent' };
+  if (riskScore <= 50) return { color: 'text-risk-medium', label: 'Medium', value: riskScore, border: '!border-l-risk-medium' };
+  if (riskScore <= 150) return { color: 'text-risk-high', label: 'High', value: riskScore, border: '!border-l-risk-high' };
+  return { color: 'text-severity-critical', label: 'Critical', value: riskScore, border: '!border-l-risk-critical' };
 }
 
 function formatDuration(startTime: string, endTime?: string | null): string {
@@ -99,7 +99,7 @@ export function SessionCard({ session, variant = 'row', showRiskScore = true }: 
               )}
             >
               {session.status === 'active' && (
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-carbon/50 dark:bg-white/50 animate-pulse" />
               )}
               {status.label}
             </span>
@@ -120,7 +120,7 @@ export function SessionCard({ session, variant = 'row', showRiskScore = true }: 
               <Gauge className="w-4 h-4 opacity-40" />
               <span className={risk.color}>{risk.label}</span>
               {risk.value > 0 && (
-                <span className="text-[10px] font-mono opacity-30">{risk.value}</span>
+                <span className="text-[10px] font-mono opacity-40">{risk.value}</span>
               )}
             </div>
           )}
@@ -148,7 +148,10 @@ export function SessionCard({ session, variant = 'row', showRiskScore = true }: 
   return (
     <Link
       to={`/sessions/${session.session_id}`}
-      className="grid grid-cols-12 gap-3 px-4 py-3.5 items-center hover:bg-paper-dark transition-colors"
+      className={cn(
+        'grid grid-cols-12 gap-3 px-4 py-3.5 items-center hover:bg-paper-dark transition-colors border-l-[3px]',
+        risk.border,
+      )}
     >
       <div className="col-span-2">
         <div className="flex items-center gap-2.5">
@@ -165,7 +168,7 @@ export function SessionCard({ session, variant = 'row', showRiskScore = true }: 
         {endpointLabel ? (
           <span className="text-xs font-mono opacity-50">{endpointLabel}</span>
         ) : (
-          <span className="text-xs opacity-30">&mdash;</span>
+          <span className="text-xs opacity-40">&mdash;</span>
         )}
       </div>
       <div className="col-span-1">
@@ -181,7 +184,7 @@ export function SessionCard({ session, variant = 'row', showRiskScore = true }: 
           )}
         >
           {session.status === 'active' && (
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-carbon/50 dark:bg-white/50 animate-pulse" />
           )}
           {status.label}
         </span>

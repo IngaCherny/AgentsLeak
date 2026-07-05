@@ -51,6 +51,7 @@ class HookType(StrEnum):
     USER_PROMPT_SUBMIT = "UserPromptSubmit"
     STOP = "Stop"
     NOTIFICATION = "Notification"
+    PRE_COMPACT = "PreCompact"
 
 
 class ToolInput(BaseModel):
@@ -205,6 +206,18 @@ class Event(BaseModel):
     tool_name: str | None = Field(None, description="Name of the tool used")
     tool_input: dict[str, Any] | None = Field(None, description="Tool input parameters")
     tool_result: dict[str, Any] | None = Field(None, description="Tool execution result")
+    tool_use_id: str | None = Field(
+        None,
+        description=(
+            "Claude Code's stable identifier for a single tool invocation. "
+            "PreToolUse, PostToolUse, and PostToolUseFailure for the same call "
+            "share this ID — used to pair Pre+Post in the UI."
+        ),
+    )
+    blocked: bool = Field(
+        default=False,
+        description="True when AgentsLeak's PreToolUse decision denied this call.",
+    )
 
     # Classification
     category: EventCategory = Field(default=EventCategory.UNKNOWN)
@@ -235,5 +248,6 @@ class Event(BaseModel):
             tool_name=payload.tool_name,
             tool_input=payload.tool_input,
             tool_result=payload.tool_result,
+            tool_use_id=payload.tool_use_id,
             raw_payload=payload.model_dump(),
         )

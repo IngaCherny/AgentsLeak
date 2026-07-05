@@ -18,6 +18,23 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+// Capture an admin token passed via ?token= (the presenter opens the dashboard
+// with it once). It is stored so every later request carries it as a Bearer
+// token, then stripped from the URL so it is not left visible or bookmarked.
+(() => {
+  try {
+    const url = new URL(window.location.href);
+    const t = url.searchParams.get('token');
+    if (t) {
+      localStorage.setItem('agentsleak_token', t);
+      url.searchParams.delete('token');
+      window.history.replaceState({}, '', url.toString());
+    }
+  } catch {
+    /* non-browser context — ignore */
+  }
+})();
+
 class ApiClient {
   private baseUrl: string;
 

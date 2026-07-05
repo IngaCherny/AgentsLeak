@@ -167,7 +167,7 @@ export function EventCard({ event, compact = false, showSession = true, endpoint
             {endpointLabel ? (
               <span className="text-xs font-mono opacity-50">{endpointLabel}</span>
             ) : (
-              <span className="text-xs opacity-30">—</span>
+              <span className="text-xs opacity-40">—</span>
             )}
           </div>
         )}
@@ -337,7 +337,7 @@ export function AggregatedEventCard({ group }: { group: AggregatedEvent }) {
         <div className="col-span-2">
           <Timestamp date={group.lastTime} />
           {timeRange && (
-            <span className="text-[10px] font-mono opacity-30 ml-1">({timeRange})</span>
+            <span className="text-[10px] font-mono opacity-40 ml-1">({timeRange})</span>
           )}
         </div>
 

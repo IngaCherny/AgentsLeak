@@ -54,9 +54,9 @@ export function ConnectionStatus({
       className={cn(
         'flex items-center gap-2 px-3 py-1.5 text-xs font-mono rounded-full border',
         connected
-          ? 'bg-green-50 text-green-700 border-green-600'
+          ? 'bg-carbon/[0.05] dark:bg-white/[0.06] text-carbon border-carbon/30'
           : reconnecting
-            ? 'bg-yellow-50 text-yellow-700 border-yellow-600'
+            ? 'bg-alert-red/[0.08] text-alert-red border-alert-red/40'
             : 'bg-white text-carbon border-carbon',
         className
       )}
@@ -66,7 +66,7 @@ export function ConnectionStatus({
           <span
             className={cn(
               'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75',
-              connected ? 'bg-green-500' : 'bg-yellow-500'
+              connected ? 'bg-carbon dark:bg-white' : 'bg-alert-red'
             )}
           />
         )}
@@ -74,9 +74,9 @@ export function ConnectionStatus({
           className={cn(
             'relative inline-flex h-2 w-2 rounded-full',
             connected
-              ? 'bg-green-500'
+              ? 'bg-carbon dark:bg-white'
               : reconnecting
-                ? 'bg-yellow-500'
+                ? 'bg-alert-red'
                 : 'bg-carbon'
           )}
         />

@@ -99,6 +99,11 @@ async def collect_pre_tool_use(
     # Synchronously evaluate for blocking decision
     decision = await engine.evaluate_pre_tool(event)
 
+    # Record whether the call was blocked so the UI can pair Pre→Block
+    # without needing a separate alert join.
+    if not decision.allow:
+        event.blocked = True
+
     # Save event regardless of decision
     db.save_event(event)
     db.increment_session_event_count(payload.session_id)
@@ -358,6 +363,34 @@ async def collect_subagent_stop(
         "status": "subagent_stopped",
         "session_id": payload.session_id,
     }
+
+
+@router.post("/pre-compact")
+async def collect_pre_compact(
+    payload: HookPayload,
+    request: Request,
+    db: Database = Depends(get_database),
+    engine: Engine = Depends(get_engine),
+) -> dict[str, Any]:
+    """Collect pre-compact event.
+
+    Called BEFORE Claude Code compacts the conversation context.
+    Compaction summarizes/discards earlier turns to fit the context window,
+    so without this snapshot the audit trail has gaps at every boundary.
+    """
+    logger.info(f"PreCompact: session={payload.session_id}")
+
+    # Ensure session exists
+    _create_or_update_session(payload, db, request)
+
+    # Create pre-compact event
+    event = Event.from_hook_payload(payload)
+    event.hook_type = "PreCompact"
+    db.save_event(event)
+    db.increment_session_event_count(payload.session_id)
+    await engine.enqueue(event)
+
+    return {"status": "received"}
 
 
 @router.get("/health")

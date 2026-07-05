@@ -46,6 +46,30 @@ class TestClassifyEvent:
         event = make_event(tool_name="SomeRandomTool", tool_input={})
         assert classify_event(event) == EventCategory.UNKNOWN
 
+    def test_classify_mcp_tool(self):
+        """MCP tools (mcp__server__tool) are categorized as MCP_TOOL_USE."""
+        event = make_event(
+            tool_name="mcp__github__create_issue",
+            tool_input={"title": "bug", "body": "x"},
+        )
+        assert classify_event(event) == EventCategory.MCP_TOOL_USE
+
+    def test_classify_mcp_tool_with_file_path_not_misclassified(self):
+        """MCP filesystem tools must not be miscategorized as FILE_WRITE."""
+        event = make_event(
+            tool_name="mcp__filesystem__write_file",
+            tool_input={"file_path": "/tmp/x", "content": "y"},
+        )
+        assert classify_event(event) == EventCategory.MCP_TOOL_USE
+
+    def test_classify_mcp_tool_with_command_not_misclassified(self):
+        """MCP tools whose input has a `command` field must not become COMMAND_EXEC."""
+        event = make_event(
+            tool_name="mcp__memory__read",
+            tool_input={"command": "list"},
+        )
+        assert classify_event(event) == EventCategory.MCP_TOOL_USE
+
     def test_classify_glob_is_file_read(self):
         event = make_event(tool_name="Glob", tool_input={"pattern": "**/*.py"})
         assert classify_event(event) == EventCategory.FILE_READ

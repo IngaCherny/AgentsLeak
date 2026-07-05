@@ -23,15 +23,15 @@ function CommandGroupNode({ data, selected }: NodeProps<CommandGroupNodeData>) {
       className={cn(
         'relative px-3 py-2 min-w-[90px] max-w-[150px] rounded-md',
         'border-2 transition-all duration-200',
-        'bg-white border-[#8B8B8B] shadow-[2px_2px_0px_#8B8B8B]',
-        selected && 'ring-2 ring-[#D90429] !border-[#D90429]',
-        'cursor-pointer hover:border-carbon hover:shadow-[3px_3px_0px_#1A1A1A]',
+        'bg-white border-risk-medium shadow-brutal-sm',
+        selected && 'ring-2 ring-risk-critical !border-risk-critical',
+        'cursor-pointer hover:border-carbon hover:shadow-brutal',
       )}
       title={`${data.command} commands${isCollapsed ? ` (${hiddenCount} hidden)` : ''}`}
     >
       {/* Alert indicator */}
       {data.alertCount > 0 && (
-        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#D90429] border-2 border-white rounded-full flex items-center justify-center">
+        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-risk-critical border-2 border-white rounded-full flex items-center justify-center">
           <span className="text-[7px] font-bold text-white">{data.alertCount}</span>
         </div>
       )}
@@ -43,7 +43,7 @@ function CommandGroupNode({ data, selected }: NodeProps<CommandGroupNodeData>) {
           {data.command}
         </span>
         {isCollapsed && hiddenCount > 0 && (
-          <span className="text-[9px] font-mono bg-carbon/10 text-carbon/50 px-1 rounded-sm">
+          <span className="text-[10px] font-mono bg-carbon/10 text-carbon/50 px-1 rounded-sm">
             {hiddenCount}
           </span>
         )}
