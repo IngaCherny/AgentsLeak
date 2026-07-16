@@ -109,6 +109,10 @@ function targetText(pair: EventPair): { text: string; prefix?: string } {
   if (e.file_paths && e.file_paths.length > 0) return { text: e.file_paths[0] };
   if (e.commands && e.commands.length > 0) return { text: e.commands[0], prefix: '$ ' };
   if (e.urls && e.urls.length > 0) return { text: e.urls[0] };
+  // Skill invocations carry no path/command/url — surface the skill name so
+  // the row reads "/code-review" instead of a bare "Skill".
+  const skill = e.skill ?? (e.tool_input?.skill as string | undefined);
+  if (e.tool_name === 'Skill' && skill) return { text: skill, prefix: '/' };
   return { text: e.tool_name || e.hook_type || 'Unknown' };
 }
 
@@ -244,7 +248,7 @@ export function PairedEventCard({
             {pair.pre.tool_input && Object.keys(pair.pre.tool_input).length > 0 && (
               <div>
                 <p className="opacity-40 mb-1 text-[10px] font-mono uppercase tracking-wider">Tool Input</p>
-                <pre className="text-paper-dark dark:text-carbon font-mono text-xs bg-carbon dark:bg-paper-dark p-3 overflow-x-auto rounded">
+                <pre className="code-block font-mono text-xs p-3 overflow-x-auto rounded">
                   {JSON.stringify(pair.pre.tool_input, null, 2)}
                 </pre>
               </div>
@@ -260,7 +264,7 @@ export function PairedEventCard({
                 >
                   {isProblem ? 'Error' : 'Tool Result'}
                 </p>
-                <pre className="text-paper-dark dark:text-carbon font-mono text-xs bg-carbon dark:bg-paper-dark p-3 overflow-x-auto rounded">
+                <pre className="code-block font-mono text-xs p-3 overflow-x-auto rounded">
                   {JSON.stringify(pair.post.tool_result, null, 2)}
                 </pre>
               </div>

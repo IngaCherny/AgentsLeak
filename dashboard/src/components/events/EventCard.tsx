@@ -251,7 +251,7 @@ export function EventCard({ event, compact = false, showSession = true, endpoint
               <div>
                 <p className="opacity-40 mb-1 text-sm">Commands</p>
                 {event.commands.map((cmd, i) => (
-                  <pre key={i} className="text-paper-dark font-mono text-xs bg-carbon p-3 overflow-x-auto">
+                  <pre key={i} className="code-block font-mono text-xs p-3 overflow-x-auto rounded">
                     $ {cmd}
                   </pre>
                 ))}
@@ -270,7 +270,7 @@ export function EventCard({ event, compact = false, showSession = true, endpoint
             {event.tool_input && Object.keys(event.tool_input).length > 0 && (
               <div>
                 <p className="opacity-40 mb-1 text-sm">Tool Input</p>
-                <pre className="text-paper-dark font-mono text-xs bg-carbon p-3 overflow-x-auto">
+                <pre className="code-block font-mono text-xs p-3 overflow-x-auto rounded">
                   {JSON.stringify(event.tool_input, null, 2)}
                 </pre>
               </div>

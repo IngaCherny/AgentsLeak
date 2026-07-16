@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from agentsleak.engine.classifier import classify_event, compute_severity
+from agentsleak.engine.classifier import (
+    classify_event,
+    compute_severity,
+    extract_skill_name,
+)
 from agentsleak.models.events import EventCategory, Severity
 
 from .conftest import make_event
@@ -108,6 +112,35 @@ class TestClassifyEvent:
     def test_classify_subagent_hook(self):
         event = make_event(tool_name=None, hook_type="SubagentStart", tool_input={})
         assert classify_event(event) == EventCategory.SUBAGENT_SPAWN
+
+    def test_classify_skill_is_session_lifecycle(self):
+        event = make_event(tool_name="Skill", tool_input={"skill": "code-review"})
+        assert classify_event(event) == EventCategory.SESSION_LIFECYCLE
+
+
+# ── Skill name extraction ─────────────────────────────────────────────────────
+
+
+class TestExtractSkillName:
+    def test_extracts_skill_name(self):
+        event = make_event(tool_name="Skill", tool_input={"skill": "code-review", "args": "high"})
+        assert extract_skill_name(event) == "code-review"
+
+    def test_strips_whitespace(self):
+        event = make_event(tool_name="Skill", tool_input={"skill": "  verify  "})
+        assert extract_skill_name(event) == "verify"
+
+    def test_none_for_non_skill_tool(self):
+        event = make_event(tool_name="Bash", tool_input={"skill": "code-review"})
+        assert extract_skill_name(event) is None
+
+    def test_none_when_name_missing(self):
+        event = make_event(tool_name="Skill", tool_input={"args": "x"})
+        assert extract_skill_name(event) is None
+
+    def test_none_when_tool_input_empty(self):
+        event = make_event(tool_name="Skill", tool_input={})
+        assert extract_skill_name(event) is None
 
 
 # ── Severity ─────────────────────────────────────────────────────────────────

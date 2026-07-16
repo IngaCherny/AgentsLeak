@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from agentsleak.engine.classifier import extract_skill_name
 from agentsleak.store.database import Database, get_database
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class EventSummary(BaseModel):
     blocked: bool = False
     category: str
     severity: str
+    skill: str | None = None
     file_paths: list[str] = Field(default_factory=list)
     commands: list[str] = Field(default_factory=list)
     urls: list[str] = Field(default_factory=list)
@@ -53,6 +55,7 @@ class EventDetail(BaseModel):
     tool_result: dict[str, Any] | None
     category: str
     severity: str
+    skill: str | None = None
     file_paths: list[str]
     commands: list[str]
     urls: list[str]
@@ -114,6 +117,7 @@ async def list_events(
             blocked=e.blocked,
             category=e.category.value,
             severity=e.severity.value,
+            skill=extract_skill_name(e),
             file_paths=e.file_paths,
             commands=e.commands,
             urls=e.urls,
@@ -155,6 +159,7 @@ async def get_event(
         tool_result=event.tool_result,
         category=event.category.value,
         severity=event.severity.value,
+        skill=extract_skill_name(event),
         file_paths=event.file_paths,
         commands=event.commands,
         urls=event.urls,

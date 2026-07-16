@@ -45,6 +45,10 @@ export function useLiveEvents(
       if (sessionId && event.session_id !== sessionId) return;
 
       setEvents((prev) => {
+        // Guard against double-delivery (e.g. a duplicate socket): if we
+        // already hold this event id, don't prepend it again.
+        if (prev.some((e) => e.id === event.id)) return prev;
+
         const newEvent: LiveEvent = { ...event, isNew: true };
         const updated = [newEvent, ...prev].slice(0, maxEvents);
 
@@ -79,6 +83,8 @@ export function useLiveEvents(
       if (sessionId && alert.session_id !== sessionId) return;
 
       setAlerts((prev) => {
+        if (prev.some((a) => a.id === alert.id)) return prev;
+
         const newAlert: LiveAlert = { ...alert, isNew: true };
         const updated = [newAlert, ...prev].slice(0, maxEvents);
 

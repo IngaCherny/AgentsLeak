@@ -306,6 +306,25 @@ async def collect_permission_request(
     return {"status": "received"}
 
 
+def _parse_slash_command(prompt: str) -> tuple[str, str] | None:
+    """Parse a leading slash command out of a user prompt.
+
+    ``"/code-review high"`` -> ``("code-review", "high")``,
+    ``"/verify"`` -> ``("verify", "")``, ``"just text"`` -> ``None``.
+    The slash must be immediately followed by the command name
+    (``"/ spaced"`` is not a command).
+    """
+    stripped = prompt.strip()
+    if not stripped.startswith("/"):
+        return None
+    body = stripped[1:]
+    if not body or body[0].isspace():
+        return None
+    parts = body.split(None, 1)
+    args = parts[1].strip() if len(parts) > 1 else ""
+    return parts[0], args
+
+
 @router.post("/user-prompt-submit")
 async def collect_user_prompt_submit(
     payload: HookPayload,
@@ -326,6 +345,23 @@ async def collect_user_prompt_submit(
     # Create event
     event = Event.from_hook_payload(payload)
     event.hook_type = "UserPromptSubmit"
+
+    # A user-typed slash command ("/code-review high") is a skill/command
+    # invocation that never passes through the Skill *tool*, so it produces no
+    # PreToolUse event. Synthesize a Skill-shaped event so it surfaces in the
+    # feed as "/<name>" alongside assistant-invoked skills. The "invocation"
+    # marker keeps it distinguishable from a real Skill tool call.
+    prompt_text = (event.raw_payload or {}).get("prompt")
+    if isinstance(prompt_text, str):
+        parsed = _parse_slash_command(prompt_text)
+        if parsed is not None:
+            name, args = parsed
+            event.tool_name = "Skill"
+            event.tool_input = {
+                "skill": name,
+                "args": args,
+                "invocation": "slash_command",
+            }
 
     # Save and queue for processing
     db.save_event(event)

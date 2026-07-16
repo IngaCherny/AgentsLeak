@@ -69,6 +69,8 @@ export interface Event {
   blocked?: boolean;
   category: string;
   severity: string;
+  /** Name of the invoked skill/slash-command, when tool_name === "Skill". */
+  skill?: string | null;
   file_paths: string[];
   commands: string[];
   urls: string[];

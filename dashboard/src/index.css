@@ -398,6 +398,19 @@ html.dark .bg-carbon {
   background-color: #ececec;
 }
 
+/* ── Code / JSON blocks (Tool Input, Commands, Tool Result) ──
+   Dark box + light text in both themes. Own class so the html.dark
+   .bg-carbon remap above doesn't turn these near-white. */
+.code-block {
+  background-color: #1a1a1a;
+  color: #f5f5f0;
+}
+
+html.dark .code-block {
+  background-color: #2a2a2a;
+  color: #ffffff;
+}
+
 /* ── Text ── */
 html.dark .text-carbon {
   color: #ececec;

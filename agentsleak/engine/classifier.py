@@ -304,6 +304,26 @@ def extract_urls(event: Event) -> list[str]:
     return list(set(urls))
 
 
+def extract_skill_name(event: Event) -> str | None:
+    """Extract the invoked skill name from a Skill tool event.
+
+    When Claude Code runs a slash-command / skill, it invokes the built-in
+    ``Skill`` tool with ``tool_input`` shaped like ``{"skill": "code-review",
+    "args": "..."}``. The skill name lives only inside that raw blob, so we lift
+    it into a first-class field for display, filtering and policy matching.
+
+    Returns None for any non-Skill event or when the name is missing.
+    """
+    if event.tool_name != "Skill":
+        return None
+
+    tool_input = event.tool_input or {}
+    skill = tool_input.get("skill") or tool_input.get("skill_name")
+    if isinstance(skill, str) and skill.strip():
+        return skill.strip()
+    return None
+
+
 class CommandFileRef:
     """A file referenced by a command, with its role (read or write)."""
 

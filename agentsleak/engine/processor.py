@@ -15,6 +15,7 @@ from agentsleak.engine.classifier import (
     extract_commands,
     extract_file_paths,
     extract_ip_addresses,
+    extract_skill_name,
     extract_urls,
 )
 from agentsleak.engine.sequence import SequenceTracker, get_default_sequence_rules
@@ -703,6 +704,7 @@ class Engine:
             "tool_result": event.tool_result,
             "category": event.category.value if hasattr(event.category, "value") else str(event.category),
             "severity": event.severity.value if hasattr(event.severity, "value") else str(event.severity),
+            "skill": extract_skill_name(event),
             "file_paths": event.file_paths,
             "commands": event.commands,
             "urls": event.urls,

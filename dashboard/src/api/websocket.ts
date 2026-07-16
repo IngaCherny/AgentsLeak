@@ -50,9 +50,22 @@ class WebSocketConnection {
   }
 
   connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    // Already connected, or a handshake is already in flight. Guarding against
+    // CONNECTING (not just OPEN) is what prevents a second socket: React
+    // StrictMode mounts effects twice, so connect() is called again while the
+    // first socket is still CONNECTING — without this check we'd open a
+    // duplicate socket and every broadcast would be delivered twice.
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
+
+    // Detach any lingering socket (CLOSING/CLOSED) before replacing it, so its
+    // handlers can't keep emitting into the app after we drop the reference.
+    this.teardownSocket();
 
     this.isIntentionallyClosed = false;
 
@@ -109,10 +122,28 @@ class WebSocketConnection {
       this.reconnectTimer = null;
     }
 
-    if (this.ws) {
-      this.ws.close(1000, 'Client disconnect');
-      this.ws = null;
+    this.teardownSocket(1000, 'Client disconnect');
+  }
+
+  /**
+   * Detach handlers from the current socket and close it. Nulling the handlers
+   * before closing guarantees an orphaned socket can't fire onmessage/onclose
+   * into the app (and can't trigger a stray reconnect) after we've moved on.
+   */
+  private teardownSocket(code?: number, reason?: string): void {
+    if (!this.ws) {
+      return;
     }
+    this.ws.onopen = null;
+    this.ws.onclose = null;
+    this.ws.onerror = null;
+    this.ws.onmessage = null;
+    try {
+      this.ws.close(code, reason);
+    } catch {
+      // Socket may already be closing/closed — ignore.
+    }
+    this.ws = null;
   }
 
   private scheduleReconnect(): void {
