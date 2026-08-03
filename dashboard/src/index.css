@@ -281,6 +281,20 @@
     color: rgb(236 236 236 / 0.3);
   }
 
+  /* Selects need an opaque dark surface so the native option popup doesn't
+     render light text on a browser-default light background. Covers both the
+     .input (forms) and .input-search (filter dropdowns) select styles. */
+  :is(.dark select.input),
+  :is(.dark select.input-search) {
+    background-color: #1a1a1a;
+  }
+
+  :is(.dark .input) option,
+  :is(.dark .input-search) option {
+    background-color: #1a1a1a;
+    color: #ececec;
+  }
+
   :is(.dark .input-search) {
     background-color: rgba(236, 236, 236, 0.05);
     color: #ececec;
@@ -411,6 +425,20 @@ html.dark .code-block {
   color: #ffffff;
 }
 
+/* ── Chat: user message bubble ──
+   Own class so the html.dark .bg-carbon remap (→ light) can't turn this into
+   white text on a light box. Dark accent bubble in light mode; an elevated
+   surface in dark mode so it reads against the near-black chat field. */
+.chat-bubble-user {
+  background-color: #16171b;
+  color: #ffffff;
+}
+
+html.dark .chat-bubble-user {
+  background-color: #2c313a;
+  color: #ffffff;
+}
+
 /* ── Text ── */
 html.dark .text-carbon {
   color: #ececec;
@@ -499,16 +527,28 @@ html.dark .hover\:bg-carbon\/\[0\.02\]:hover {
   background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* ── Active pill inversion ── */
-html.dark button.bg-carbon[class*="text-white"],
-html.dark a.bg-carbon[class*="text-white"] {
+/* ── Active pill / badge inversion ──
+   The html.dark .bg-carbon remap turns these boxes light; without also flipping
+   the text they'd be white-on-light. Applies to ANY element (buttons, tabs,
+   badges, operator pills, category chips) that pairs bg-carbon with text-white. */
+html.dark .bg-carbon[class*="text-white"] {
   background-color: #ececec;
   color: #0a0a0a;
 }
 
-html.dark button.bg-carbon[class*="text-white"][class*="border-carbon"],
-html.dark a.bg-carbon[class*="text-white"][class*="border-carbon"] {
+html.dark .bg-carbon[class*="text-white"][class*="border-carbon"] {
   border-color: #ececec;
+}
+
+/* ── Graph nodes: keep solid carbon nodes dark ──
+   The global bg-carbon→light remap is for page surfaces; the activity graph uses
+   bg-carbon as a solid DARK node with white child text (User node, medium-risk
+   Tool node). Restore dark inside the graph for CONTAINERS — elements that don't
+   themselves carry text-white. Same-element bg-carbon+text-white badges (e.g. the
+   File node's "W") are still handled by the inversion rule above, so they're
+   excluded here via :not(). */
+html.dark .react-flow .bg-carbon:not([class*="text-white"]) {
+  background-color: #16171b;
 }
 
 /* ── Severity color overrides — red → grey flow ── */

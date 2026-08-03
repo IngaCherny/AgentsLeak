@@ -93,10 +93,16 @@ export default function SessionDetail() {
     return { start: start.toISOString(), end: end.toISOString(), interval };
   }, [session]);
 
+  // Bucket size for the Session Activity chart. 'auto' follows the heuristic
+  // above; the rest let the user force minute / hour / day (24h) buckets.
+  const [intervalOverride, setIntervalOverride] = useState<'auto' | 'minute' | 'hour' | 'day'>('auto');
+  const effectiveInterval =
+    intervalOverride === 'auto' ? sessionTimelineParams.interval : intervalOverride;
+
   const { data: sessionTimeline, isLoading: timelineLoading } = useTimeline(
     sessionTimelineParams.start,
     sessionTimelineParams.end,
-    sessionTimelineParams.interval,
+    effectiveInterval,
     session?.session_id
   );
 
@@ -358,14 +364,33 @@ export default function SessionDetail() {
                     </p>
                   )}
                 </div>
-                <span className="text-xs font-mono opacity-40">
-                  {sessionTimelineParams.interval}
-                </span>
+                <div className="flex items-center gap-0.5 rounded-lg bg-carbon/[0.04] p-0.5">
+                  {([
+                    ['auto', 'Auto'],
+                    ['minute', 'Min'],
+                    ['hour', 'Hour'],
+                    ['day', '24h'],
+                  ] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setIntervalOverride(val)}
+                      className={cn(
+                        'px-2 py-0.5 text-[11px] font-mono rounded-md transition-all',
+                        intervalOverride === val
+                          ? 'bg-white dark:bg-white/[0.12] text-carbon dark:text-white shadow-sm'
+                          : 'text-carbon/45 hover:text-carbon/70'
+                      )}
+                      title={val === 'auto' ? `Auto (${sessionTimelineParams.interval})` : `Bucket by ${val}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <EventsOverTime
                 data={sessionTimeline}
                 isLoading={timelineLoading}
-                interval={sessionTimelineParams.interval}
+                interval={effectiveInterval}
               />
             </div>
 

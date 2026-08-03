@@ -261,7 +261,7 @@ export default function PolicyAssistant() {
               )}
               <div className={cn('max-w-[85%]', msg.role === 'user' ? 'order-first' : '')}>
                 {msg.role === 'user' ? (
-                  <div className="bg-carbon text-white rounded-2xl rounded-tr-sm px-4 py-2.5">
+                  <div className="chat-bubble-user rounded-2xl rounded-tr-sm px-4 py-2.5">
                     <p className="text-sm">{msg.content}</p>
                   </div>
                 ) : msg.error ? (

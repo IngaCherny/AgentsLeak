@@ -38,6 +38,10 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.policies.all, 'detail', id] as const,
     assistantStatus: () => [...queryKeys.policies.all, 'assistant-status'] as const,
   },
+  honeytokens: {
+    all: ['honeytokens'] as const,
+    list: () => [...queryKeys.honeytokens.all, 'list'] as const,
+  },
   endpoints: {
     all: ['endpoints'] as const,
     stats: () => [...['endpoints'], 'stats'] as const,
@@ -280,6 +284,46 @@ export function useGeneratePolicy() {
     mutationFn: (prompt: string) => apiClient.generatePolicy(prompt),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.policies.all });
+    },
+  });
+}
+
+// Honeytoken Hooks
+export function useHoneytokens() {
+  return useQuery({
+    queryKey: queryKeys.honeytokens.list(),
+    queryFn: () => apiClient.fetchHoneytokens(),
+  });
+}
+
+export function useCreateHoneytoken() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (token: { kind: string; pattern: string; label?: string }) =>
+      apiClient.createHoneytoken(token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.honeytokens.all });
+    },
+  });
+}
+
+export function useToggleHoneytoken() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      apiClient.toggleHoneytoken(id, enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.honeytokens.all });
+    },
+  });
+}
+
+export function useDeleteHoneytoken() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.deleteHoneytoken(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.honeytokens.all });
     },
   });
 }

@@ -186,6 +186,17 @@ export interface Policy {
   created_at: string;
   updated_at: string;
   hit_count?: number;
+  skills?: string[];
+  honeytoken?: boolean;
+}
+
+export interface Honeytoken {
+  id: string;
+  kind: 'path' | 'value';
+  pattern: string;
+  label: string;
+  builtin: boolean;
+  enabled: boolean;
 }
 
 export interface PolicyCondition {

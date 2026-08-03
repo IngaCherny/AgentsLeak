@@ -21,11 +21,13 @@ import {
   Globe,
   Zap,
   Sparkles,
+  KeyRound,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePolicies, useTogglePolicy, useDeletePolicy, useCreatePolicy, usePolicyAssistantStatus } from '@/api/queries';
 import type { Policy } from '@/api/types';
 import PolicyAssistant from '@/components/policies/PolicyAssistant';
+import HoneytokensPanel from '@/components/policies/HoneytokensPanel';
 import { StatTile } from '@/components/common/StatTile';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -198,6 +200,18 @@ function PolicyRow({ policy, onToggle, onDelete, isToggling, isDeleting }: Polic
               <span className="text-xs font-mono opacity-60">{policy.condition_logic?.toUpperCase() || 'ALL'} must match</span>
             </div>
           </div>
+
+          {policy.honeytoken && (
+            <div>
+              <p className="text-xs font-mono opacity-40 uppercase mb-1">Match</p>
+              <div className="inline-flex items-center gap-1.5 bg-risk-critical/[0.06] rounded-lg px-3 py-2">
+                <KeyRound className="w-3.5 h-3.5 text-risk-critical" />
+                <span className="text-[11px] font-mono font-semibold text-carbon dark:text-white">
+                  Any access to a honeytoken (decoy secret)
+                </span>
+              </div>
+            </div>
+          )}
 
           {policy.conditions && policy.conditions.length > 0 && (
             <div>
@@ -464,7 +478,7 @@ interface PolicyGroup {
 }
 
 export default function Policies() {
-  const [activeTab, setActiveTab] = useState<'rules' | 'assistant'>('rules');
+  const [activeTab, setActiveTab] = useState<'rules' | 'honeytokens' | 'assistant'>('rules');
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -564,6 +578,18 @@ export default function Policies() {
               <Shield className="w-3.5 h-3.5" />
               Rules
             </button>
+            <button
+              onClick={() => setActiveTab('honeytokens')}
+              className={cn(
+                'px-3.5 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-1.5',
+                activeTab === 'honeytokens'
+                  ? 'bg-white dark:bg-white/[0.12] text-carbon dark:text-white shadow-sm'
+                  : 'text-carbon/50 hover:text-carbon/70'
+              )}
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              Honeytokens
+            </button>
             {assistantAvailable && (
               <button
                 onClick={() => setActiveTab('assistant')}
@@ -622,6 +648,8 @@ export default function Policies() {
 
       {activeTab === 'assistant' ? (
         <PolicyAssistant />
+      ) : activeTab === 'honeytokens' ? (
+        <HoneytokensPanel />
       ) : (
         <>
           {/* Stats Cards */}

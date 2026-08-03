@@ -1,4 +1,5 @@
 import type {
+  Honeytoken,
   Session,
   Event,
   Alert,
@@ -224,6 +225,32 @@ class ApiClient {
 
   async getPolicyAssistantStatus(): Promise<{ available: boolean }> {
     return this.request<{ available: boolean }>('/policies/assistant-status');
+  }
+
+  // Honeytokens
+  async fetchHoneytokens(): Promise<Honeytoken[]> {
+    const response = await this.request<{ items: Honeytoken[]; total: number }>('/honeytokens');
+    return response.items;
+  }
+
+  async createHoneytoken(token: { kind: string; pattern: string; label?: string }): Promise<Honeytoken> {
+    return this.request<Honeytoken>('/honeytokens', {
+      method: 'POST',
+      body: JSON.stringify(token),
+    });
+  }
+
+  async toggleHoneytoken(id: string, enabled: boolean): Promise<Honeytoken> {
+    return this.request<Honeytoken>(`/honeytokens/${id}/toggle`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  async deleteHoneytoken(id: string): Promise<void> {
+    return this.request<void>(`/honeytokens/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   async generatePolicy(prompt: string): Promise<{ policy: Partial<Policy>; explanation: string }> {
