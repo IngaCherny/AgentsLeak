@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS policies (
     enabled INTEGER DEFAULT 1,
     categories TEXT,  -- JSON array of event categories
     tools TEXT,  -- JSON array of tool names
+    skills TEXT,  -- JSON array of skill / slash-command names
+    honeytoken INTEGER DEFAULT 0,  -- 1 = match only honeytoken (decoy secret) events
     conditions TEXT,  -- JSON array of condition objects
     condition_logic TEXT DEFAULT 'all',
     action TEXT DEFAULT 'alert',
@@ -112,6 +114,22 @@ CREATE TABLE IF NOT EXISTS policies (
 
 CREATE INDEX IF NOT EXISTS idx_policies_name ON policies(name);
 CREATE INDEX IF NOT EXISTS idx_policies_enabled ON policies(enabled);
+
+-- Honeytokens table: editable decoy-secret definitions.
+-- Detection (in the engine) flags any event that touches one of these; a policy
+-- with honeytoken=1 then decides the response. Seeded with built-in defaults on
+-- first run, fully editable via the API / dashboard afterwards.
+CREATE TABLE IF NOT EXISTS honeytokens (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,  -- 'path' (regex vs file paths/commands) or 'value' (literal secret)
+    pattern TEXT NOT NULL,
+    label TEXT NOT NULL,
+    builtin INTEGER DEFAULT 0,  -- 1 = shipped default (can be disabled, not deleted)
+    enabled INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_honeytokens_enabled ON honeytokens(enabled);
 
 -- Graph nodes table: Activity graph vertices
 CREATE TABLE IF NOT EXISTS graph_nodes (

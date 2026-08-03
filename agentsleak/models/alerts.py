@@ -204,6 +204,14 @@ class Policy(BaseModel):
         default_factory=list, description="Event categories to match"
     )
     tools: list[str] = Field(default_factory=list, description="Tool names to match")
+    skills: list[str] = Field(
+        default_factory=list,
+        description="Skill / slash-command names to match (for Skill events)",
+    )
+    honeytoken: bool = Field(
+        default=False,
+        description="Match only events that touched a honeytoken (decoy secret)",
+    )
     conditions: list[RuleCondition] = Field(
         default_factory=list, description="Additional conditions"
     )
@@ -240,6 +248,16 @@ class Policy(BaseModel):
             tool_name = event_data.get("tool_name")
             if tool_name not in self.tools:
                 return False
+
+        # Check skill / slash-command name (first-class, parallel to tools)
+        if self.skills:
+            skill = event_data.get("skill")
+            if skill not in self.skills:
+                return False
+
+        # Check honeytoken flag — only match events that touched a decoy.
+        if self.honeytoken and not event_data.get("honeytoken"):
+            return False
 
         # Check conditions
         if self.conditions:

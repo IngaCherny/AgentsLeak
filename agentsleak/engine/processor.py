@@ -18,9 +18,10 @@ from agentsleak.engine.classifier import (
     extract_skill_name,
     extract_urls,
 )
+from agentsleak.engine.honeytokens import detect_honeytoken, load_honeytokens
 from agentsleak.engine.sequence import SequenceTracker, get_default_sequence_rules
 from agentsleak.models.alerts import Alert, Policy, PolicyAction
-from agentsleak.models.events import Decision, Event, EventCategory
+from agentsleak.models.events import Decision, Event, EventCategory, Severity
 from agentsleak.models.graph import EdgeRelation, GraphEdge, GraphNode, NodeType
 from agentsleak.store.database import Database, get_database
 
@@ -52,6 +53,10 @@ class Engine:
         self._task: asyncio.Task[None] | None = None
         self._policies: list[Policy] = []
         self._sequence_tracker = SequenceTracker()
+        self._honeytokens = load_honeytokens()
+        # Active skill per session (graph node id) so tool activity that a skill
+        # triggered nests under the skill in the activity graph.
+        self._session_skill: dict[str, Any] = {}
 
     @property
     def database(self) -> Database:
@@ -72,6 +77,7 @@ class Engine:
 
         self._running = True
         self._load_policies()
+        self._load_honeytokens()
         self._task = asyncio.create_task(self._process_loop())
         logger.info("Engine processing loop started")
 
@@ -101,6 +107,23 @@ class Engine:
     def reload_policies(self) -> None:
         """Reload policies and sequence rules."""
         self._load_policies()
+
+    def _load_honeytokens(self) -> None:
+        """Load the active honeytoken set from the DB (falling back to defaults)."""
+        try:
+            self._honeytokens = self.database.get_honeytokens(enabled_only=True)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.error(f"Failed to load honeytokens from DB: {e}")
+            self._honeytokens = load_honeytokens()
+        logger.info("Loaded %d honeytokens", len(self._honeytokens))
+
+    def reload_honeytokens(self) -> None:
+        """Reload honeytokens so edits take effect immediately."""
+        self._load_honeytokens()
+
+    def reload_trusted_domains(self) -> None:
+        """Reload the sequence tracker's trusted-domain config."""
+        self._sequence_tracker.reload_trusted_domains()
 
     async def enqueue(self, event: Event) -> None:
         """Add an event to the processing queue.
@@ -205,6 +228,12 @@ class Engine:
         event.category = classify_event(event)
         event.severity = compute_severity(event)
 
+        # A honeytoken touch is critical by definition — override whatever the
+        # heuristics computed. Detection is zero-false-positive, so this also
+        # lights up events that only produce a PostToolUse (no Pre to block).
+        if detect_honeytoken(event, self._honeytokens):
+            event.severity = Severity.CRITICAL
+
     async def evaluate_pre_tool(self, event: Event) -> Decision:
         """Evaluate an event for pre-tool blocking.
 
@@ -261,6 +290,51 @@ class Engine:
                     reason=f"Blocked by policy: {policy.name}",
                     alert_id=alert.id,
                 )
+
+        # Check blocking behavioral sequences (e.g. download-from-unknown-domain
+        # → execute). Earlier steps are already in the tracker's window; this asks
+        # whether the current event completes a BLOCK-action sequence.
+        seq = self._sequence_tracker.check_blocking(
+            event_id=event.id,
+            session_id=event.session_id,
+            timestamp=event.timestamp,
+            event_data=self._event_to_dict(event),
+        )
+        if seq is not None:
+            rule, matched_events = seq
+            alert = Alert(
+                session_id=event.session_id,
+                title=rule.alert_title or f"Blocked: {rule.name}",
+                description=rule.alert_description or rule.description,
+                severity=rule.severity,
+                category=event.category,
+                event_ids=[me.event_id for me in matched_events],
+                blocked=True,
+            )
+            for i, (step, me) in enumerate(zip(rule.steps, matched_events)):
+                sd = me.data
+                alert.add_evidence(
+                    event_id=me.event_id,
+                    description=f"Step {i + 1}: {step.label}",
+                    data={"sequence_rule": rule.id, "category": sd.get("category", "")},
+                    file_path=(sd.get("file_paths") or [None])[0] if isinstance(sd.get("file_paths"), list) else None,
+                    command=(sd.get("commands") or [None])[0] if isinstance(sd.get("commands"), list) else None,
+                    url=(sd.get("urls") or [None])[0] if isinstance(sd.get("urls"), list) else None,
+                )
+            alert.tags = [*rule.tags, "sequence-blocking"]
+            self.database.save_alert(alert)
+            self.database.increment_session_alert_count(event.session_id)
+            await self._broadcast_alert(alert)
+
+            logger.warning(
+                f"Blocked tool execution: sequence={rule.id} ({rule.name}), "
+                f"tool={event.tool_name}, session={event.session_id}"
+            )
+            return Decision(
+                allow=False,
+                reason=f"Blocked by sequence rule: {rule.name}",
+                alert_id=alert.id,
+            )
 
         # Allow by default
         return Decision(allow=True)
@@ -513,6 +587,10 @@ class Engine:
             sid = event.session_id
             eid = event.id
 
+            # A session ending clears its active-skill attribution.
+            if event.hook_type == "SessionEnd":
+                self._session_skill.pop(sid, None)
+
             # ── 1) Session node (always) ──────────────────────────────
             session_node = GraphNode(
                 node_type=NodeType.SESSION,
@@ -528,7 +606,34 @@ class Engine:
             # (value includes session_id to prevent cross-session merging)
             parent_id = session_actual_id
 
-            if event.tool_name:
+            if event.tool_name == "Skill":
+                # A Skill invocation gets its own node, labelled with the skill
+                # name (not the generic "Skill"), and becomes the parent for the
+                # tool activity it triggers, so the graph reads:
+                #   Session ──invokes──▶ gif-greeting ──uses──▶ Bash/Read ──▶ …
+                skill_name = str((event.tool_input or {}).get("skill") or "skill")
+                skill_node = GraphNode(
+                    node_type=NodeType.TOOL,
+                    label=skill_name,
+                    value=f"skill:{skill_name}:{sid}",
+                    session_ids=[sid],
+                    event_ids=[eid],
+                )
+                skill_actual_id = _UUID(db.save_graph_node(skill_node))
+                db.save_graph_edge(GraphEdge(
+                    source_id=session_actual_id,
+                    target_id=skill_actual_id,
+                    relation=EdgeRelation.INVOKES,
+                    session_ids=[sid],
+                    event_ids=[eid],
+                ))
+                self._session_skill[sid] = skill_actual_id
+                parent_id = skill_actual_id
+
+            elif event.tool_name:
+                # If a skill is currently active for this session, nest the tool
+                # under the skill; otherwise directly under the session.
+                tool_parent_id = self._session_skill.get(sid, session_actual_id)
                 tool_node = GraphNode(
                     node_type=NodeType.TOOL,
                     label=event.tool_name,
@@ -538,7 +643,7 @@ class Engine:
                 )
                 tool_actual_id = _UUID(db.save_graph_node(tool_node))
                 db.save_graph_edge(GraphEdge(
-                    source_id=session_actual_id,
+                    source_id=tool_parent_id,
                     target_id=tool_actual_id,
                     relation=EdgeRelation.USES,
                     session_ids=[sid],
@@ -766,6 +871,15 @@ class Engine:
             "tool_result": event.tool_result or {},
             "category": event.category.value,
             "severity": event.severity.value,
+            "skill": extract_skill_name(event),
+            # Label of the honeytoken this event touched (None if clean). Lets a
+            # policy match honeytoken access via a first-class `honeytoken: true`
+            # flag — detection is a signal, enforcement is the policy's choice.
+            "honeytoken": (
+                hit.token.label
+                if (hit := detect_honeytoken(event, self._honeytokens)) is not None
+                else None
+            ),
             "file_paths": event.file_paths,
             "commands": event.commands,
             "urls": event.urls,

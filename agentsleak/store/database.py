@@ -7,8 +7,11 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
+
+if TYPE_CHECKING:
+    from agentsleak.engine.honeytokens import Honeytoken
 
 from agentsleak.config.settings import Settings, get_settings
 from agentsleak.models.alerts import Alert, Policy
@@ -42,7 +45,7 @@ class Database:
     """SQLite database manager for AgentsLeak."""
 
     ALLOWED_ALERT_COLUMNS = {"status", "action_taken", "assigned_to", "tags", "metadata"}
-    ALLOWED_POLICY_COLUMNS = {"name", "description", "enabled", "severity", "action", "conditions", "metadata"}
+    ALLOWED_POLICY_COLUMNS = {"name", "description", "enabled", "severity", "action", "conditions", "metadata", "skills", "honeytoken"}
 
     def __init__(self, settings: Settings | None = None) -> None:
         """Initialize database connection.
@@ -81,6 +84,8 @@ class Database:
             cursor.executescript(SCHEMA_SQL)
         # Run idempotent migrations
         self._run_migrations()
+        # Seed the editable honeytoken list with built-in defaults on first run
+        self._seed_default_honeytokens()
 
     def _run_migrations(self) -> None:
         """Run schema migrations (safe to call multiple times)."""
@@ -91,6 +96,8 @@ class Database:
             "ALTER TABLE sessions ADD COLUMN session_source TEXT",
             "ALTER TABLE events ADD COLUMN tool_use_id TEXT",
             "ALTER TABLE events ADD COLUMN blocked INTEGER DEFAULT 0",
+            "ALTER TABLE policies ADD COLUMN skills TEXT",  # JSON array of skill names
+            "ALTER TABLE policies ADD COLUMN honeytoken INTEGER DEFAULT 0",
         ]
         for sql in migrations:
             try:
@@ -556,14 +563,16 @@ class Database:
                 """
                 INSERT INTO policies (
                     id, name, description, enabled, categories, tools,
-                    conditions, condition_logic, action, severity,
+                    skills, honeytoken, conditions, condition_logic, action, severity,
                     alert_title, alert_description, tags
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(name) DO UPDATE SET
                     description = excluded.description,
                     enabled = excluded.enabled,
                     categories = excluded.categories,
                     tools = excluded.tools,
+                    skills = excluded.skills,
+                    honeytoken = excluded.honeytoken,
                     conditions = excluded.conditions,
                     condition_logic = excluded.condition_logic,
                     action = excluded.action,
@@ -579,6 +588,8 @@ class Database:
                     1 if policy.enabled else 0,
                     _serialize_json([c.value for c in policy.categories]),
                     _serialize_json(policy.tools),
+                    _serialize_json(policy.skills),
+                    1 if policy.honeytoken else 0,
                     _serialize_json([c.model_dump() for c in policy.conditions]),
                     policy.condition_logic,
                     policy.action.value,
@@ -619,6 +630,8 @@ class Database:
             enabled=bool(row["enabled"]),
             categories=categories,
             tools=_deserialize_json(row["tools"]) or [],
+            skills=_deserialize_json(row["skills"]) or [],
+            honeytoken=bool(row["honeytoken"]),
             conditions=conditions,
             condition_logic=row["condition_logic"],
             action=PolicyAction(row["action"]),
@@ -1113,9 +1126,12 @@ class Database:
             elif key == "conditions":
                 set_clauses.append(f"{key} = ?")
                 params.append(_serialize_json([c.model_dump() for c in value]))
-            elif key == "tags" or key == "tools":
+            elif key == "tags" or key == "tools" or key == "skills":
                 set_clauses.append(f"{key} = ?")
                 params.append(_serialize_json(value))
+            elif key == "honeytoken":
+                set_clauses.append(f"{key} = ?")
+                params.append(1 if value else 0)
             elif key == "action":
                 set_clauses.append(f"{key} = ?")
                 params.append(value.value if hasattr(value, "value") else value)
@@ -1151,6 +1167,111 @@ class Database:
                 "DELETE FROM policies WHERE id = ?",
                 (_uuid_to_str(policy_id),),
             )
+
+    # =========================================================================
+    # Honeytoken Operations
+    # =========================================================================
+
+    def _seed_default_honeytokens(self) -> None:
+        """Insert the built-in decoys the first time the table is empty.
+
+        Uses the module-level default set (plus any file/env seed) as the initial
+        editable list. After this, the DB is the source of truth and users can
+        add/remove/disable decoys freely without them reappearing.
+        """
+        from agentsleak.engine.honeytokens import load_honeytokens
+
+        with self.transaction() as cursor:
+            cursor.execute("SELECT COUNT(*) AS n FROM honeytokens")
+            if cursor.fetchone()["n"] > 0:
+                return
+            for tok in load_honeytokens():
+                cursor.execute(
+                    "INSERT INTO honeytokens (id, kind, pattern, label, builtin, enabled) "
+                    "VALUES (?, ?, ?, ?, 1, 1)",
+                    (tok.id, tok.kind, tok.pattern, tok.label),
+                )
+
+    def _row_to_honeytoken(self, row: sqlite3.Row) -> Honeytoken:
+        from agentsleak.engine.honeytokens import Honeytoken
+
+        return Honeytoken(
+            id=row["id"],
+            kind=row["kind"],
+            pattern=row["pattern"],
+            label=row["label"],
+        )
+
+    def get_honeytokens(self, enabled_only: bool = True) -> list[Honeytoken]:
+        """Return the active honeytoken set from the DB."""
+        query = "SELECT * FROM honeytokens"
+        if enabled_only:
+            query += " WHERE enabled = 1"
+        query += " ORDER BY builtin DESC, created_at ASC"
+        with self.transaction() as cursor:
+            cursor.execute(query)
+            return [self._row_to_honeytoken(row) for row in cursor.fetchall()]
+
+    def get_honeytoken_rows(self) -> list[dict[str, Any]]:
+        """Return all honeytokens as plain dicts (incl. builtin/enabled) for the API."""
+        with self.transaction() as cursor:
+            cursor.execute(
+                "SELECT * FROM honeytokens ORDER BY builtin DESC, created_at ASC"
+            )
+            return [
+                {
+                    "id": row["id"],
+                    "kind": row["kind"],
+                    "pattern": row["pattern"],
+                    "label": row["label"],
+                    "builtin": bool(row["builtin"]),
+                    "enabled": bool(row["enabled"]),
+                }
+                for row in cursor.fetchall()
+            ]
+
+    def add_honeytoken(self, kind: str, pattern: str, label: str) -> dict[str, Any]:
+        """Add a user-defined honeytoken. Returns its row dict."""
+        token_id = f"ht-user-{uuid4().hex[:12]}"
+        with self.transaction() as cursor:
+            cursor.execute(
+                "INSERT INTO honeytokens (id, kind, pattern, label, builtin, enabled) "
+                "VALUES (?, ?, ?, ?, 0, 1)",
+                (token_id, kind, pattern, label),
+            )
+        return {
+            "id": token_id,
+            "kind": kind,
+            "pattern": pattern,
+            "label": label,
+            "builtin": False,
+            "enabled": True,
+        }
+
+    def set_honeytoken_enabled(self, token_id: str, enabled: bool) -> bool:
+        """Enable/disable a honeytoken. Returns True if a row was updated."""
+        with self.transaction() as cursor:
+            cursor.execute(
+                "UPDATE honeytokens SET enabled = ? WHERE id = ?",
+                (1 if enabled else 0, token_id),
+            )
+            return cursor.rowcount > 0
+
+    def delete_honeytoken(self, token_id: str) -> str | None:
+        """Delete a user-defined honeytoken.
+
+        Built-in decoys cannot be deleted (only disabled). Returns 'deleted',
+        'builtin' (refused), or None (not found).
+        """
+        with self.transaction() as cursor:
+            cursor.execute("SELECT builtin FROM honeytokens WHERE id = ?", (token_id,))
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            if row["builtin"]:
+                return "builtin"
+            cursor.execute("DELETE FROM honeytokens WHERE id = ?", (token_id,))
+            return "deleted"
 
     def get_session_graph(self, session_id: str) -> dict[str, Any]:
         """Get graph nodes and edges for a specific session."""
@@ -1406,8 +1527,12 @@ class Database:
             "info": 0,
         }
         with self.transaction() as cursor:
+            # Only count OPEN alerts — closing one (resolved / false_positive)
+            # must drop it from the triage severity counts on the dashboard.
             cursor.execute(
-                f"SELECT severity, COUNT(*) as count FROM alerts WHERE 1=1{al_date_clause}{ep_session_clause_al} GROUP BY severity",
+                f"SELECT severity, COUNT(*) as count FROM alerts "
+                f"WHERE status NOT IN ('resolved', 'false_positive')"
+                f"{al_date_clause}{ep_session_clause_al} GROUP BY severity",
                 al_params,
             )
             for row in cursor.fetchall():

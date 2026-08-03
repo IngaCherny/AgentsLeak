@@ -31,6 +31,30 @@ class TestPolicyMatches:
         policy = make_alert_policy(tools=["Bash"])
         assert not policy.matches({"category": "command_exec", "tool_name": "Read"})
 
+    def test_matches_skill_filter(self):
+        policy = Policy(name="No deploy skill", skills=["deploy"], action=PolicyAction.BLOCK)
+        assert policy.matches({"tool_name": "Skill", "skill": "deploy"})
+
+    def test_no_match_wrong_skill(self):
+        policy = Policy(name="No deploy skill", skills=["deploy"], action=PolicyAction.BLOCK)
+        assert not policy.matches({"tool_name": "Skill", "skill": "code-review"})
+
+    def test_no_match_skill_missing(self):
+        policy = Policy(name="No deploy skill", skills=["deploy"], action=PolicyAction.BLOCK)
+        assert not policy.matches({"tool_name": "Bash", "skill": None})
+
+    def test_matches_honeytoken_flag(self):
+        policy = Policy(name="Honeytoken block", honeytoken=True, action=PolicyAction.BLOCK)
+        assert policy.matches({"tool_name": "Read", "honeytoken": ".env.decoy"})
+
+    def test_no_match_honeytoken_when_clean(self):
+        policy = Policy(name="Honeytoken block", honeytoken=True, action=PolicyAction.BLOCK)
+        assert not policy.matches({"tool_name": "Read", "honeytoken": None})
+
+    def test_no_match_honeytoken_field_absent(self):
+        policy = Policy(name="Honeytoken block", honeytoken=True, action=PolicyAction.BLOCK)
+        assert not policy.matches({"tool_name": "Read"})
+
     def test_matches_condition_contains(self):
         policy = make_alert_policy(
             conditions=[

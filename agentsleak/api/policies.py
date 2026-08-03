@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -63,6 +64,8 @@ class PolicyDetail(BaseModel):
     enabled: bool
     categories: list[str]
     tools: list[str]
+    skills: list[str] = Field(default_factory=list)
+    honeytoken: bool = False
     conditions: list[RuleConditionCreate]
     condition_logic: str
     action: str
@@ -90,6 +93,8 @@ class PolicyCreateRequest(BaseModel):
     enabled: bool = Field(default=True)
     categories: list[str] = Field(default_factory=list)
     tools: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    honeytoken: bool = Field(default=False)
     conditions: list[RuleConditionCreate] = Field(default_factory=list)
     condition_logic: str = Field(default="all", pattern="^(all|any)$")
     action: PolicyAction = Field(default=PolicyAction.ALERT)
@@ -107,6 +112,8 @@ class PolicyUpdateRequest(BaseModel):
     enabled: bool | None = None
     categories: list[str] | None = None
     tools: list[str] | None = None
+    skills: list[str] | None = None
+    honeytoken: bool | None = None
     conditions: list[RuleConditionCreate] | None = None
     condition_logic: str | None = None
     action: PolicyAction | None = None
@@ -270,6 +277,8 @@ async def list_policies(
             enabled=p.enabled,
             categories=[c.value for c in p.categories],
             tools=p.tools,
+            skills=p.skills,
+            honeytoken=p.honeytoken,
             conditions=[
                 RuleConditionCreate(
                     field=c.field,
@@ -327,7 +336,7 @@ async def generate_policy(request: GeneratePolicyRequest) -> GeneratePolicyRespo
     try:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=os.environ.get("AGENTSLEAK_ASSISTANT_MODEL", "claude-sonnet-5"),
             max_tokens=1024,
             system=POLICY_ASSISTANT_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": request.prompt}],
@@ -420,6 +429,8 @@ async def get_policy(
         enabled=policy.enabled,
         categories=[c.value for c in policy.categories],
         tools=policy.tools,
+        skills=policy.skills,
+        honeytoken=policy.honeytoken,
         conditions=conditions,
         condition_logic=policy.condition_logic,
         action=policy.action.value,
@@ -466,6 +477,8 @@ async def create_policy(
         enabled=request.enabled,
         categories=categories,
         tools=request.tools,
+        skills=request.skills,
+        honeytoken=request.honeytoken,
         conditions=conditions,
         condition_logic=request.condition_logic,
         action=request.action,
@@ -534,6 +547,10 @@ async def update_policy(
         update_data["categories"] = categories
     if request.tools is not None:
         update_data["tools"] = request.tools
+    if request.skills is not None:
+        update_data["skills"] = request.skills
+    if request.honeytoken is not None:
+        update_data["honeytoken"] = request.honeytoken
     if request.conditions is not None:
         update_data["conditions"] = [
             RuleCondition(

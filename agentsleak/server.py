@@ -20,6 +20,7 @@ from agentsleak.api import (
     alerts_router,
     events_router,
     graph_router,
+    honeytokens_router,
     policies_router,
     sessions_router,
     stats_router,
@@ -222,6 +223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(events_router, prefix="/api")
     app.include_router(alerts_router, prefix="/api")
     app.include_router(policies_router, prefix="/api")
+    app.include_router(honeytokens_router, prefix="/api")
     app.include_router(graph_router, prefix="/api")
     app.include_router(stats_router, prefix="/api")
     app.include_router(websocket_router, prefix="/api")
@@ -246,8 +248,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Black Hat Arsenal interactive demo — the "Red-Team Arcade" phone page.
     # Registered before the SPA catch-all so /arsenal is not swallowed by it.
-    _arsenal_dir = Path(__file__).parent / "arsenal"
+    #
+    # The demo was moved out of the package into a sibling ``ArsenalDemo/`` project,
+    # so resolve its directory from the first candidate that actually has the page:
+    #   1. AGENTSLEAK_ARSENAL_DIR (explicit override)
+    #   2. agentsleak/arsenal      (legacy, when bundled in-package)
+    #   3. <repo-parent>/ArsenalDemo (the sibling project it was moved to)
+    _arsenal_candidates = [
+        Path(p)
+        for p in (
+            os.environ.get("AGENTSLEAK_ARSENAL_DIR"),
+            Path(__file__).parent / "arsenal",
+            Path(__file__).parent.parent.parent / "ArsenalDemo",
+        )
+        if p
+    ]
+    _arsenal_dir = next(
+        (d for d in _arsenal_candidates if (d / "index.html").is_file()),
+        _arsenal_candidates[-1],
+    )
     _arsenal_file = _arsenal_dir / "index.html"
+    logger.info("Arsenal demo directory: %s", _arsenal_dir)
 
     @app.get("/arsenal")
     async def arsenal_console() -> FileResponse:

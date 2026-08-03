@@ -26,3 +26,14 @@ class TestParseSlashCommand:
 
     def test_slash_space_is_not_a_command(self):
         assert _parse_slash_command("/ spaced") is None
+
+    def test_pasted_absolute_path_is_not_a_command(self):
+        # Starts with "/" but the name segment has "/" and ".", so it must not
+        # be mistaken for a "/Users..." skill.
+        assert _parse_slash_command("/Users/inga/notes.txt what is this?") is None
+
+    def test_plugin_scoped_command(self):
+        assert _parse_slash_command("/plugin:skill go") == ("plugin:skill", "go")
+
+    def test_name_with_dot_rejected(self):
+        assert _parse_slash_command("/weird.name arg") is None

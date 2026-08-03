@@ -119,6 +119,82 @@ class TestEvaluatePreTool:
         assert "First Policy" in decision.reason
 
 
+class TestHoneytokenBlocking:
+    """Honeytoken access is detection-only by default; blocking is policy-gated.
+
+    Reads of a decoy secret are flagged CRITICAL (severity signal) but ALLOWED
+    unless an operator has enabled a honeytoken BLOCK policy. This is what lets
+    the demo show the same skill running "with and without" the policy.
+    """
+
+    @pytest.mark.asyncio
+    async def test_honeytoken_read_allowed_without_policy(self):
+        """No policy configured → decoy read is allowed but marked CRITICAL."""
+        db = make_mock_database()
+        engine = make_engine(policies=[], database=db)  # no policies configured
+        event = make_event(
+            tool_name="Read",
+            tool_input={"file_path": "/home/agent/.env.decoy"},
+        )
+        decision = await engine.evaluate_pre_tool(event)
+        assert decision.allow is True
+        # Detection still fires — severity is bumped to CRITICAL.
+        assert event.severity == Severity.CRITICAL
+        # Nothing was blocked, so no block-alert is created in pre-tool.
+        db.save_alert.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_honeytoken_policy_blocks(self):
+        """A honeytoken BLOCK policy → decoy read is blocked."""
+        db = make_mock_database()
+        policy = make_block_policy(
+            name="Honeytoken access — BLOCK",
+            honeytoken=True,
+        )
+        engine = make_engine(policies=[policy], database=db)
+        event = make_event(
+            tool_name="Read",
+            tool_input={"file_path": "/home/agent/.env.decoy"},
+        )
+        decision = await engine.evaluate_pre_tool(event)
+        assert decision.allow is False
+        assert "Honeytoken access" in decision.reason
+        assert event.severity == Severity.CRITICAL
+        db.save_alert.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_honeytoken_policy_ignores_clean_event(self):
+        """A honeytoken BLOCK policy must not touch non-decoy reads."""
+        policy = make_block_policy(name="Honeytoken access — BLOCK", honeytoken=True)
+        engine = make_engine(policies=[policy])
+        event = make_event(tool_name="Read", tool_input={"file_path": "/home/agent/.env"})
+        decision = await engine.evaluate_pre_tool(event)
+        assert decision.allow is True
+
+    @pytest.mark.asyncio
+    async def test_disabled_honeytoken_policy_does_not_block(self):
+        """Toggling the policy off → decoy read flows through again (demo: 'without')."""
+        policy = make_block_policy(
+            name="Honeytoken access — BLOCK",
+            honeytoken=True,
+            enabled=False,
+        )
+        engine = make_engine(policies=[policy])
+        event = make_event(
+            tool_name="Read",
+            tool_input={"file_path": "/home/agent/.env.decoy"},
+        )
+        decision = await engine.evaluate_pre_tool(event)
+        assert decision.allow is True
+
+    @pytest.mark.asyncio
+    async def test_normal_read_still_allowed(self):
+        engine = make_engine(policies=[])
+        event = make_event(tool_name="Read", tool_input={"file_path": "/home/agent/.env"})
+        decision = await engine.evaluate_pre_tool(event)
+        assert decision.allow is True
+
+
 class TestDecisionToHookResponse:
     def test_allow_response(self):
         decision = Decision(allow=True)

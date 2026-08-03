@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -193,14 +194,16 @@ async def collect_session_end(
     """
     logger.info(f"SessionEnd: {payload.session_id}")
 
-    # Update session status
-    db.end_session(payload.session_id)
-
     # Create session end event
     event = Event.from_hook_payload(payload)
     event.hook_type = "SessionEnd"
     db.save_event(event)
+    # Count the event first — this re-activates the session (un-stale on activity) —
+    # then end the session LAST so the 'ended' status is the final state. Ending
+    # before the increment would let increment_session_event_count flip it back to
+    # 'active', leaving a closed session counted as active.
     db.increment_session_event_count(payload.session_id)
+    db.end_session(payload.session_id)
     await engine.enqueue(event)
 
     return {"status": "session_ended", "session_id": payload.session_id}
@@ -306,13 +309,20 @@ async def collect_permission_request(
     return {"status": "received"}
 
 
+# A command name is letters/digits plus - _ : (plugin skills look like
+# "plugin:skill"). Anything else — a slash, a dot, a space — means the token
+# isn't a command, so a pasted path like "/Users/x/notes.txt ..." is not
+# mistaken for a "/Users..." skill.
+_COMMAND_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_:-]{0,63}$")
+
+
 def _parse_slash_command(prompt: str) -> tuple[str, str] | None:
     """Parse a leading slash command out of a user prompt.
 
     ``"/code-review high"`` -> ``("code-review", "high")``,
     ``"/verify"`` -> ``("verify", "")``, ``"just text"`` -> ``None``.
-    The slash must be immediately followed by the command name
-    (``"/ spaced"`` is not a command).
+    The slash must be immediately followed by a command-shaped name; a pasted
+    path (``"/Users/x/notes.txt what is this"``) returns ``None``.
     """
     stripped = prompt.strip()
     if not stripped.startswith("/"):
@@ -321,8 +331,11 @@ def _parse_slash_command(prompt: str) -> tuple[str, str] | None:
     if not body or body[0].isspace():
         return None
     parts = body.split(None, 1)
+    name = parts[0]
+    if not _COMMAND_NAME_RE.match(name):
+        return None
     args = parts[1].strip() if len(parts) > 1 else ""
-    return parts[0], args
+    return name, args
 
 
 @router.post("/user-prompt-submit")
@@ -342,31 +355,36 @@ async def collect_user_prompt_submit(
     # Ensure session exists
     _create_or_update_session(payload, db, request)
 
-    # Create event
+    # Create event — the prompt event is kept intact for audit fidelity
+    # ("what did the user actually type"). We do NOT rewrite it into a Skill.
     event = Event.from_hook_payload(payload)
     event.hook_type = "UserPromptSubmit"
 
-    # A user-typed slash command ("/code-review high") is a skill/command
-    # invocation that never passes through the Skill *tool*, so it produces no
-    # PreToolUse event. Synthesize a Skill-shaped event so it surfaces in the
-    # feed as "/<name>" alongside assistant-invoked skills. The "invocation"
-    # marker keeps it distinguishable from a real Skill tool call.
-    prompt_text = (event.raw_payload or {}).get("prompt")
-    if isinstance(prompt_text, str):
-        parsed = _parse_slash_command(prompt_text)
-        if parsed is not None:
-            name, args = parsed
-            event.tool_name = "Skill"
-            event.tool_input = {
-                "skill": name,
-                "args": args,
-                "invocation": "slash_command",
-            }
-
-    # Save and queue for processing
     db.save_event(event)
     db.increment_session_event_count(payload.session_id)
     await engine.enqueue(event)
+
+    # A user-typed slash command ("/code-review high") is a skill/command
+    # invocation that never passes through the Skill *tool*, so it produces no
+    # PreToolUse event. Emit a *separate* Skill-shaped event so it surfaces in
+    # the feed as "/<name>" alongside assistant-invoked skills — without
+    # clobbering the original prompt event. The "invocation" marker keeps it
+    # distinguishable from a real Skill tool call.
+    prompt_text = (event.raw_payload or {}).get("prompt")
+    parsed = _parse_slash_command(prompt_text) if isinstance(prompt_text, str) else None
+    if parsed is not None:
+        name, args = parsed
+        skill_event = Event.from_hook_payload(payload)
+        skill_event.hook_type = "UserPromptSubmit"
+        skill_event.tool_name = "Skill"
+        skill_event.tool_input = {
+            "skill": name,
+            "args": args,
+            "invocation": "slash_command",
+        }
+        db.save_event(skill_event)
+        db.increment_session_event_count(payload.session_id)
+        await engine.enqueue(skill_event)
 
     return {"status": "received"}
 

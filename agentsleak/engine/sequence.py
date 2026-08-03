@@ -10,11 +10,15 @@ Example: "Read .env file" → "curl POST to external server" within 5 minutes
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import logging
+import os
 import re
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -24,6 +28,120 @@ from agentsleak.models.events import Severity
 logger = logging.getLogger(__name__)
 
 
+# Built-in trusted software sources. A download from any of these (or a
+# subdomain) is NOT considered "unknown". Deliberately small and infra-focused;
+# deployments extend this via config (see load_trusted_domains).
+DEFAULT_TRUSTED_DOMAINS: frozenset[str] = frozenset({
+    "pypi.org", "files.pythonhosted.org", "pypi.python.org",
+    "github.com", "raw.githubusercontent.com", "objects.githubusercontent.com",
+    "codeload.github.com", "registry.npmjs.org", "npmjs.com", "registry.yarnpkg.com",
+    "crates.io", "static.crates.io", "proxy.golang.org", "sum.golang.org",
+    "deb.debian.org", "security.ubuntu.com", "archive.ubuntu.com",
+    "anthropic.com", "api.anthropic.com", "docs.anthropic.com",
+})
+
+_URL_RE = re.compile(r"https?://([^/\s'\"]+)", re.IGNORECASE)
+
+
+def _normalize_domain(raw: str) -> str:
+    """Strip scheme/path/whitespace so 'https://Foo.COM/x' → 'foo.com'."""
+    host = raw.strip().lower()
+    m = _URL_RE.match(host)
+    if m:
+        host = m.group(1)
+    host = host.split("/")[0].split("@")[-1].split(":")[0]
+    return host.strip(".")
+
+
+def load_trusted_domains() -> frozenset[str]:
+    """Return the active trusted-domain set: defaults plus user-configured ones.
+
+    User domains are ADDED to the defaults (defaults are always trusted) from:
+
+      * ``AGENTSLEAK_TRUSTED_DOMAINS`` — a comma/space/newline-separated list, and
+      * a JSON array file at ``AGENTSLEAK_TRUSTED_DOMAINS_FILE`` (or, by default,
+        ``~/.agentsleak/trusted_domains.json``).
+
+    A malformed file is logged and ignored rather than failing startup.
+    """
+    domains: set[str] = {d.lower() for d in DEFAULT_TRUSTED_DOMAINS}
+
+    env_val = os.environ.get("AGENTSLEAK_TRUSTED_DOMAINS")
+    if env_val:
+        for tok in re.split(r"[,\s]+", env_val):
+            if tok.strip():
+                domains.add(_normalize_domain(tok))
+
+    path_str = os.environ.get("AGENTSLEAK_TRUSTED_DOMAINS_FILE")
+    path = Path(path_str) if path_str else Path.home() / ".agentsleak" / "trusted_domains.json"
+    if path.is_file():
+        try:
+            raw = json.loads(path.read_text())
+            if isinstance(raw, list):
+                for entry in raw:
+                    if isinstance(entry, str) and entry.strip():
+                        domains.add(_normalize_domain(entry))
+            else:
+                logger.warning("Trusted-domains file must be a JSON array: %s", path)
+        except (OSError, ValueError) as exc:
+            logger.warning("Failed to load trusted domains from %s: %s", path, exc)
+
+    return frozenset(d for d in domains if d)
+
+
+def _is_local_or_private(host: str) -> bool:
+    """True for localhost and loopback/private/link-local IPs.
+
+    A fetch from the local machine or a private network is never an internet
+    malware source, so it must not count as a download from an "unknown domain".
+    """
+    host = host.lower().strip(".")
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private or ip.is_link_local
+
+
+def _is_trusted_domain(host: str, trusted: frozenset[str] | None = None) -> bool:
+    """True if host is local/private, or equals/subdomains a trusted domain."""
+    if trusted is None:
+        trusted = DEFAULT_TRUSTED_DOMAINS
+    host = host.lower().strip(".")
+    if _is_local_or_private(host):
+        return True
+    return any(host == d or host.endswith("." + d) for d in trusted)
+
+
+def _extract_domains(event_data: dict[str, Any]) -> set[str]:
+    """Pull hostnames referenced by an event (WebFetch url, curl/wget commands, urls list)."""
+    candidates: list[str] = []
+
+    urls = event_data.get("urls")
+    if isinstance(urls, list):
+        candidates += [u for u in urls if isinstance(u, str)]
+
+    tool_input = event_data.get("tool_input")
+    if isinstance(tool_input, dict):
+        url = tool_input.get("url")
+        if isinstance(url, str):
+            candidates.append(url)
+
+    commands = event_data.get("commands")
+    if isinstance(commands, list):
+        candidates += [c for c in commands if isinstance(c, str)]
+
+    domains: set[str] = set()
+    for text in candidates:
+        for match in _URL_RE.finditer(text):
+            host = match.group(1).split("@")[-1].split(":")[0].lower()
+            if host:
+                domains.add(host)
+    return domains
+
+
 @dataclass
 class SequenceStep:
     """A single step in a sequence rule."""
@@ -31,8 +149,14 @@ class SequenceStep:
     label: str
     categories: list[str] = field(default_factory=list)
     field_patterns: dict[str, str] = field(default_factory=dict)
-    # field_patterns maps dot-notation fields to regex patterns
+    # field_patterns maps dot-notation fields to regex patterns (ALL must match)
     # e.g. {"tool_input.command": r"curl.*-d"}
+    any_field_patterns: dict[str, str] = field(default_factory=dict)
+    # any_field_patterns: like field_patterns but OR — at least one must match.
+    # Lets one step cover both a shell download (commands) and a WebFetch (url).
+    unknown_domain: bool = False
+    # unknown_domain: step matches only if the event references at least one URL
+    # whose host is not in TRUSTED_DOMAINS (i.e. a download from an unknown source).
 
 
 @dataclass
@@ -70,12 +194,24 @@ class SequenceTracker:
     Uses deduplication to avoid firing the same sequence multiple times.
     """
 
-    def __init__(self, max_buffer_size: int = 500) -> None:
+    def __init__(
+        self,
+        max_buffer_size: int = 500,
+        trusted_domains: frozenset[str] | None = None,
+    ) -> None:
         self._rules: list[SequenceRule] = []
         self._buffers: dict[str, deque[_BufferedEvent]] = {}
         self._max_buffer_size = max_buffer_size
         # Track fired sequences: {(rule_id, session_id, frozenset(event_ids))}
         self._fired: set[tuple[str, str]] = set()
+        self._trusted_domains = (
+            trusted_domains if trusted_domains is not None else load_trusted_domains()
+        )
+
+    def reload_trusted_domains(self) -> None:
+        """Re-read the trusted-domain config so edits take effect."""
+        self._trusted_domains = load_trusted_domains()
+        logger.info("Loaded %d trusted domains", len(self._trusted_domains))
 
     def load_rules(self, rules: list[SequenceRule]) -> None:
         """Load sequence rules."""
@@ -152,7 +288,12 @@ class SequenceTracker:
         # Time window cutoff
         cutoff = now - timedelta(seconds=rule.time_window_seconds)
         window_events = [e for e in buf if e.timestamp >= cutoff]
+        return self._match_in_window(rule, window_events)
 
+    def _match_in_window(
+        self, rule: SequenceRule, window_events: list[_BufferedEvent]
+    ) -> list[_BufferedEvent] | None:
+        """Match a rule's steps against a fixed list of window events."""
         if not window_events:
             return None
 
@@ -173,6 +314,18 @@ class SequenceTracker:
             # Unordered: just need one match per step within the window
             return [matches[0] for matches in step_matches]
 
+    def _field_matches(
+        self, event_data: dict[str, Any], field_path: str, pattern: str
+    ) -> bool:
+        """True if the event's field value matches the regex pattern."""
+        field_value = self._get_nested(event_data, field_path)
+        if field_value is None:
+            return False
+        try:
+            return bool(re.search(pattern, str(field_value), re.IGNORECASE))
+        except re.error:
+            return False
+
     def _matches_step(self, step: SequenceStep, event_data: dict[str, Any]) -> bool:
         """Check if an event matches a sequence step."""
         # Check category
@@ -181,28 +334,81 @@ class SequenceTracker:
             if event_cat not in step.categories:
                 return False
 
-        # Check field patterns
+        # Check field patterns (ALL must match)
         for field_path, pattern in step.field_patterns.items():
-            field_value = self._get_nested(event_data, field_path)
-            if field_value is None:
+            if not self._field_matches(event_data, field_path, pattern):
                 return False
-            try:
-                if not re.search(pattern, str(field_value), re.IGNORECASE):
-                    return False
-            except re.error:
+
+        # Check any_field_patterns (at least ONE must match)
+        if step.any_field_patterns:
+            if not any(
+                self._field_matches(event_data, fp, pat)
+                for fp, pat in step.any_field_patterns.items()
+            ):
+                return False
+
+        # Check unknown-domain condition: needs at least one untrusted URL host.
+        if step.unknown_domain:
+            domains = _extract_domains(event_data)
+            if not domains or all(
+                _is_trusted_domain(d, self._trusted_domains) for d in domains
+            ):
                 return False
 
         return True
 
+    def check_blocking(
+        self,
+        event_id: UUID,
+        session_id: str,
+        timestamp: datetime,
+        event_data: dict[str, Any],
+    ) -> tuple[SequenceRule, list[_BufferedEvent]] | None:
+        """Would this incoming event COMPLETE a BLOCK-action sequence right now?
+
+        Used synchronously at PreToolUse: the earlier steps are already in the
+        session buffer (added during their own async processing); this checks
+        whether the incoming (final) event closes the pattern. Does not mutate
+        the buffer — the async path adds the event canonically afterwards — but
+        marks the rule fired so it won't also raise a duplicate alert.
+        """
+        buf = self._buffers.get(session_id)
+        incoming = _BufferedEvent(event_id=event_id, timestamp=timestamp, data=event_data)
+
+        for rule in self._rules:
+            if rule.action != PolicyAction.BLOCK or not rule.enabled:
+                continue
+            if (rule.id, session_id) in self._fired:
+                continue
+            cutoff = timestamp - timedelta(seconds=rule.time_window_seconds)
+            window = [e for e in (buf or []) if e.timestamp >= cutoff]
+            window.append(incoming)
+            result = self._match_in_window(rule, window)
+            # Only block when the incoming event is itself part of the match
+            # (i.e. it is the step that completes the sequence).
+            if result is not None and any(e.event_id == event_id for e in result):
+                self._fired.add((rule.id, session_id))
+                logger.warning(
+                    f"Blocking sequence completed: {rule.id} ({rule.name}) "
+                    f"in session {session_id[:12]}"
+                )
+                return rule, result
+
+        return None
+
     def _find_ordered_match(
         self, step_matches: list[list[_BufferedEvent]]
     ) -> list[_BufferedEvent] | None:
-        """Find an ordered sequence of events matching each step.
+        """Find an ordered sequence of DISTINCT events matching each step.
 
-        Uses greedy forward scan: for each step, pick the earliest event
-        that occurs after the previous step's event.
+        Greedy forward scan: for each step, pick the earliest event at or after
+        the previous step's event that hasn't already been used. Requiring
+        distinct events per step means one event can't satisfy two steps — e.g. a
+        single command that both references a URL and runs ``python3`` is not a
+        download-then-execute sequence.
         """
         result: list[_BufferedEvent] = []
+        used_ids: set[UUID] = set()
         last_time: datetime | None = None
 
         for matches in step_matches:
@@ -210,8 +416,11 @@ class SequenceTracker:
             sorted_matches = sorted(matches, key=lambda e: e.timestamp)
             found = False
             for event in sorted_matches:
+                if event.event_id in used_ids:
+                    continue
                 if last_time is None or event.timestamp >= last_time:
                     result.append(event)
+                    used_ids.add(event.event_id)
                     last_time = event.timestamp
                     found = True
                     break
@@ -311,37 +520,39 @@ def get_default_sequence_rules() -> list[SequenceRule]:
         ),
         SequenceRule(
             id="SEQ-EXEC-001",
-            name="Download and execute",
+            name="Download from unknown domain and execute",
             description=(
-                "Detects when a file is downloaded (curl -o, wget) followed by "
-                "execution (bash, python, chmod +x) within the time window."
+                "Blocks when a file is fetched from an untrusted domain — via "
+                "WebFetch or curl/wget — and then executed (bash, python, "
+                "chmod +x) within the time window. Downloads from trusted "
+                "software sources (PyPI, GitHub, npm, …) are exempt."
             ),
             steps=[
                 SequenceStep(
-                    label="Download file",
+                    label="Download from an unknown domain",
+                    # Any fetch — a WebFetch (network_access) or a shell
+                    # curl/wget (command_exec) — whose host is not trusted.
                     categories=["command_exec", "network_access"],
-                    field_patterns={
-                        "commands": r"(curl\s+.*-[oO]\s|wget\s|fetch\s+.*-o\s)",
-                    },
+                    unknown_domain=True,
                 ),
                 SequenceStep(
-                    label="Execute downloaded file",
+                    label="Execute the downloaded file",
                     categories=["command_exec"],
                     field_patterns={
-                        "commands": r"(bash|sh|python[23]?|perl|ruby|chmod\s+\+x)\s+",
+                        "commands": r"(bash|sh|zsh|python[23]?|perl|ruby|node|chmod\s+\+x)\s+\S",
                     },
                 ),
             ],
             time_window_seconds=120,
             ordered=True,
-            action=PolicyAction.ALERT,
+            action=PolicyAction.BLOCK,
             severity=Severity.CRITICAL,
-            alert_title="Download and execute pattern detected",
+            alert_title="Blocked: download from unknown domain then execute",
             alert_description=(
-                "A file was downloaded and then executed. This is a common "
-                "malware deployment technique."
+                "A file was fetched from an untrusted domain and then executed — "
+                "a common malware-deployment pattern. Blocked at the execute step."
             ),
-            tags=["download-execute", "sequence", "malware"],
+            tags=["download-execute", "sequence", "malware", "blocking"],
         ),
         SequenceRule(
             id="SEQ-RECON-001",

@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from agentsleak.engine.honeytokens import DEFAULT_HONEYTOKENS
 from agentsleak.engine.processor import Engine
 from agentsleak.engine.sequence import SequenceRule, SequenceStep, SequenceTracker
 from agentsleak.models.alerts import (
@@ -115,6 +116,8 @@ def make_engine(
     engine._database = db
     engine._policies = policies or []
     engine._sequence_tracker = SequenceTracker()
+    engine._honeytokens = list(DEFAULT_HONEYTOKENS)
+    engine._session_skill = {}
     engine._event_queue = MagicMock()
     engine._processing_task = None
 
@@ -130,17 +133,22 @@ def make_block_policy(
     name: str = "Test Block Policy",
     categories: list[EventCategory] | None = None,
     tools: list[str] | None = None,
+    skills: list[str] | None = None,
+    honeytoken: bool = False,
     conditions: list[RuleCondition] | None = None,
     condition_logic: str = "all",
     severity: Severity = Severity.HIGH,
+    enabled: bool = True,
 ) -> Policy:
     """Create a BLOCK policy."""
     return Policy(
         name=name,
         description=f"Test block policy: {name}",
-        enabled=True,
+        enabled=enabled,
         categories=categories or [],
         tools=tools or [],
+        skills=skills or [],
+        honeytoken=honeytoken,
         conditions=conditions or [],
         condition_logic=condition_logic,
         action=PolicyAction.BLOCK,

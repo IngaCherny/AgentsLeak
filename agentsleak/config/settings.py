@@ -14,6 +14,39 @@ def get_default_data_dir() -> Path:
     return Path.home() / ".agentsleak"
 
 
+def load_dotenv(path: str | Path = ".env") -> None:
+    """Load ``KEY=VALUE`` pairs from a ``.env`` file into ``os.environ``.
+
+    Kept dependency-free on purpose. A real environment variable always wins —
+    values here are only applied when the key isn't already set — so exporting a
+    variable overrides the file, matching normal ``.env`` semantics. A missing or
+    malformed line is skipped rather than raising, so a stray line never blocks
+    startup. This is what makes the README's ``echo "ANTHROPIC_API_KEY=..." > .env``
+    actually take effect.
+    """
+    env_path = Path(path)
+    if not env_path.is_file():
+        return
+
+    try:
+        lines = env_path.read_text().splitlines()
+    except OSError:
+        return
+
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):]
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if not key:
+            continue
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
 def _get_cors_origins() -> list[str]:
     """Return CORS origins from env var or sensible defaults."""
     env = os.environ.get("AGENTSLEAK_CORS_ORIGINS")
@@ -100,7 +133,9 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls) -> Settings:
-        """Load settings from environment variables."""
+        """Load settings from environment variables (and a ``.env`` file, if present)."""
+        load_dotenv()
+
         env_mapping: dict[str, tuple[str, Any]] = {
             "AGENTSLEAK_DB_PATH": ("db_path", Path),
             "AGENTSLEAK_HOST": ("host", str),
