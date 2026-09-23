@@ -1,6 +1,7 @@
 import type {
   Honeytoken,
   Session,
+  SessionConversation,
   Event,
   Alert,
   AlertContext,
@@ -169,6 +170,10 @@ class ApiClient {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     });
+  }
+
+  async fetchSessionConversation(sessionId: string): Promise<SessionConversation> {
+    return this.request<SessionConversation>(`/sessions/${sessionId}/conversation`);
   }
 
   async fetchSessionAlerts(

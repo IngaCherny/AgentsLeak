@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from agentsleak.api.conversation import build_conversation
 from agentsleak.models.events import Event, EventCategory
 from agentsleak.store.database import Database, get_database
 
@@ -224,6 +225,25 @@ async def get_session_events(
         "page_size": page_size,
         "pages": (total + page_size - 1) // page_size,
     }
+
+
+@router.get("/{session_id}/conversation")
+async def get_session_conversation(
+    session_id: str,
+    db: Database = Depends(get_database),
+) -> dict[str, Any]:
+    """Get the session as conversation turns: prompt, notes, tool steps, reply."""
+    session = db.get_session_by_id(session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found",
+        )
+
+    events = db.get_session_events_ordered(session_id)
+    alerts = db.get_alerts(session_id=session_id, limit=10_000)
+    conversation = build_conversation(events, alerts, session_active=session.status == "active")
+    return {"session_id": session_id, **conversation}
 
 
 @router.get("/{session_id}/timeline", response_model=SessionTimelineResponse)

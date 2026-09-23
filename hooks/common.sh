@@ -34,6 +34,11 @@ AGENTSLEAK_USER="${AGENTSLEAK_USER:-$(whoami 2>/dev/null || echo "${USER:-unknow
 AGENTSLEAK_SYNC_TIMEOUT="${AGENTSLEAK_SYNC_TIMEOUT:-0.2}"
 AGENTSLEAK_ASYNC_TIMEOUT="${AGENTSLEAK_ASYNC_TIMEOUT:-5}"
 
+# Conversation capture (Stop hook): Claude's replies and mid-turn notes
+AGENTSLEAK_CAPTURE_RESPONSES="${AGENTSLEAK_CAPTURE_RESPONSES:-1}"
+AGENTSLEAK_MAX_REPLY_CHARS="${AGENTSLEAK_MAX_REPLY_CHARS:-20000}"
+AGENTSLEAK_MAX_NOTE_CHARS="${AGENTSLEAK_MAX_NOTE_CHARS:-4000}"
+
 # -----------------------------------------------------------------------------
 # Dependency Checks
 # -----------------------------------------------------------------------------

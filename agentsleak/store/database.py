@@ -387,6 +387,15 @@ class Database:
             cursor.execute(query, params)
             return [self._row_to_event(row) for row in cursor.fetchall()]
 
+    def get_session_events_ordered(self, session_id: str) -> list[Event]:
+        """Get all events of a session, oldest first (insertion order breaks ties)."""
+        with self.transaction() as cursor:
+            cursor.execute(
+                "SELECT * FROM events WHERE session_id = ? ORDER BY timestamp, rowid",
+                (session_id,),
+            )
+            return [self._row_to_event(row) for row in cursor.fetchall()]
+
     def get_unprocessed_events(self, limit: int = 100) -> list[Event]:
         """Get events that haven't been processed yet."""
         with self.transaction() as cursor:

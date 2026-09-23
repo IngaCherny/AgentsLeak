@@ -175,7 +175,9 @@ def classify_event(event: Event) -> EventCategory:
         return EventCategory.NETWORK_ACCESS
 
     # Session lifecycle
-    if event.hook_type in ("SessionStart", "SessionEnd", "PermissionRequest", "UserPromptSubmit"):
+    if event.hook_type in (
+        "SessionStart", "SessionEnd", "PermissionRequest", "UserPromptSubmit", "Stop"
+    ):
         return EventCategory.SESSION_LIFECYCLE
 
     # Subagent detection

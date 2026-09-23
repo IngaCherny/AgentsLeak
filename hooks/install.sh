@@ -161,6 +161,7 @@ copy_hook_scripts() {
         "subagent-stop.sh"
         "permission-request.sh"
         "user-prompt-submit.sh"
+        "stop.sh"
         "cursor-hook.sh"
     )
 
@@ -176,6 +177,13 @@ copy_hook_scripts() {
             warn "  Missing source: ${script}"
         fi
     done
+
+    # Helper files used by the hooks (e.g. transcript parsing for stop.sh)
+    if [[ -d "${source_dir}/lib" ]]; then
+        mkdir -p "${HOOKS_DIR}/lib"
+        cp "${source_dir}/lib/"* "${HOOKS_DIR}/lib/"
+        info "  Installed: lib/"
+    fi
 
     success "Hook scripts installed"
 }
@@ -309,6 +317,17 @@ configure_claude_code() {
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOOKS_DIR}/stop.sh"
+          }
+        ]
+      }
     ]
   }
 }
@@ -358,6 +377,11 @@ AGENTSLEAK_ASYNC_TIMEOUT=5
 
 # Debug mode (set to 1 to enable debug logging)
 AGENTSLEAK_DEBUG=0
+
+# Conversation capture: Claude's replies and mid-turn notes (0 to disable)
+AGENTSLEAK_CAPTURE_RESPONSES=1
+AGENTSLEAK_MAX_REPLY_CHARS=20000
+AGENTSLEAK_MAX_NOTE_CHARS=4000
 EOF
 
     success "Configuration file created: ${config_file}"

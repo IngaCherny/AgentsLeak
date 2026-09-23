@@ -19,6 +19,7 @@ export const queryKeys = {
     alerts: (id: string, filters?: AlertFilters, page?: number) =>
       [...queryKeys.sessions.all, id, 'alerts', filters, page] as const,
     graph: (id: string) => [...queryKeys.sessions.all, id, 'graph'] as const,
+    conversation: (id: string) => [...queryKeys.sessions.all, id, 'conversation'] as const,
   },
   events: {
     all: ['events'] as const,
@@ -89,6 +90,14 @@ export function useSessionEvents(
   return useQuery({
     queryKey: queryKeys.sessions.events(sessionId, filters, page),
     queryFn: () => apiClient.fetchSessionEvents(sessionId, filters, page, pageSize),
+    enabled: !!sessionId,
+  });
+}
+
+export function useSessionConversation(sessionId: string) {
+  return useQuery({
+    queryKey: queryKeys.sessions.conversation(sessionId),
+    queryFn: () => apiClient.fetchSessionConversation(sessionId),
     enabled: !!sessionId,
   });
 }

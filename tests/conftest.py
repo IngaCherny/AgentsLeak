@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import threading
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -19,7 +22,6 @@ from agentsleak.models.alerts import (
     RuleCondition,
 )
 from agentsleak.models.events import Event, EventCategory, HookPayload, Severity
-
 
 # ---------------------------------------------------------------------------
 # Event / Payload factories
@@ -196,3 +198,31 @@ def make_condition(
         value=value,
         case_sensitive=case_sensitive,
     )
+
+
+# ---------------------------------------------------------------------------
+# Stand-in collector for hook script tests
+# ---------------------------------------------------------------------------
+
+
+class _RecordingHandler(BaseHTTPRequestHandler):
+    def do_POST(self) -> None:  # noqa: N802 (http.server API)
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        self.server.received.append((self.path, json.loads(body)))  # type: ignore[attr-defined]
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"{}")
+
+    def log_message(self, *args: Any) -> None:
+        pass
+
+
+@pytest.fixture
+def collector():
+    """Local HTTP server that records what hook scripts POST: server.received = [(path, body)]."""
+    server = HTTPServer(("127.0.0.1", 0), _RecordingHandler)
+    server.received = []  # type: ignore[attr-defined]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server
+    server.shutdown()

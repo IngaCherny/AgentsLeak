@@ -333,6 +333,94 @@ export interface SessionFilters {
   to_date?: string;
 }
 
+// ── Conversation view (GET /sessions/{id}/conversation) ──
+
+export interface ConversationAlert {
+  id: string;
+  title: string;
+  severity: Severity;
+  blocked: boolean;
+}
+
+export type StepStatus = 'ok' | 'error' | 'blocked' | 'pending' | 'no_result';
+
+export interface ConversationStep {
+  type: 'step';
+  tool_use_id: string | null;
+  tool_name: string | null;
+  summary: string;
+  input: Record<string, unknown> | null;
+  status: StepStatus;
+  result_preview: string | null;
+  result_truncated: boolean;
+  error: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+  permission_requested: boolean;
+  event_ids: string[];
+  alerts: ConversationAlert[];
+  severity: Severity | null;
+  agent_id: string | null;
+  agent_type: string | null;
+  launched_agent_id: string | null;
+  agent_reply: string | null;
+  children: ConversationStep[];
+}
+
+export interface ConversationNote {
+  type: 'note';
+  text: string;
+  timestamp: string | null;
+}
+
+export interface ConversationDivider {
+  type: 'divider';
+  kind: 'compact';
+  timestamp: string | null;
+}
+
+export type ConversationItem = ConversationStep | ConversationNote | ConversationDivider;
+
+export interface ConversationTurn {
+  index: number;
+  prompt_id: string | null;
+  kind: 'prompt' | 'task_notification' | 'session_start';
+  prompt: {
+    text: string;
+    timestamp: string | null;
+    event_id: string;
+    slash_command: string | null;
+  } | null;
+  task: {
+    task_id: string | null;
+    tool_use_id: string | null;
+    status: string | null;
+    summary: string | null;
+    result: string | null;
+  } | null;
+  status: 'complete' | 'interrupted' | 'in_progress';
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+  items: ConversationItem[];
+  reply: {
+    text: string;
+    truncated: boolean;
+    timestamp: string | null;
+    event_id: string;
+  } | null;
+  counts: { steps: number; blocked: number; errors: number; alerts: number };
+  severity: Severity | null;
+}
+
+export interface SessionConversation {
+  session_id: string;
+  replies_captured: boolean;
+  turns: ConversationTurn[];
+  totals: { turns: number; steps: number; blocked: number; alerts: number };
+}
+
 export interface EventFilters {
   session_id?: string;
   category?: string;

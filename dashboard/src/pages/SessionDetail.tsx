@@ -30,8 +30,9 @@ import { TimeAgo } from '@/components/common/TimeAgo';
 import { EventCategory, Severity } from '@/api/types';
 import { SessionGraph } from '@/components/graph';
 import EventsOverTime from '@/components/charts/EventsOverTime';
+import { ConversationView } from '@/components/conversation/ConversationView';
 
-type TabType = 'timeline' | 'events' | 'alerts' | 'files' | 'commands' | 'network' | 'graph';
+type TabType = 'conversation' | 'timeline' | 'events' | 'alerts' | 'files' | 'commands' | 'network' | 'graph';
 
 const statusStyles: Record<string, { bg: string; text: string; border: string }> = {
   active: {
@@ -48,7 +49,7 @@ const statusStyles: Record<string, { bg: string; text: string; border: string }>
 
 export default function SessionDetail() {
   const { id } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState<TabType>('timeline');
+  const [activeTab, setActiveTab] = useState<TabType>('conversation');
   const [eventsPage, setEventsPage] = useState(1);
   const [logViewMode, setLogViewMode] = useState<'paired' | 'raw'>('paired');
   const [categoryFilter, setCategoryFilter] = useState<EventCategory | ''>('');
@@ -195,6 +196,7 @@ export default function SessionDetail() {
   const displayName = session.cwd?.split('/').pop() || session.session_id.slice(0, 16);
 
   const tabs: { id: TabType; label: string; count?: number }[] = [
+    { id: 'conversation', label: 'Conversation' },
     { id: 'timeline', label: 'Timeline', count: eventsData?.total },
     { id: 'events', label: 'Events', count: eventsData?.total },
     { id: 'alerts', label: 'Alerts', count: alertsData?.total },
@@ -349,6 +351,10 @@ export default function SessionDetail() {
       </div>
 
       {/* Tab Content */}
+      {activeTab === 'conversation' && (
+        <ConversationView sessionId={session.session_id} onShowAlerts={() => setActiveTab('alerts')} />
+      )}
+
       {activeTab === 'timeline' && (
         <div className="space-y-6">
           {/* Top row: Session Activity chart + Activity Graph side by side */}

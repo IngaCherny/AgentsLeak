@@ -389,6 +389,45 @@ async def collect_user_prompt_submit(
     return {"status": "received"}
 
 
+@router.post("/stop")
+async def collect_stop(
+    payload: HookPayload,
+    request: Request,
+    db: Database = Depends(get_database),
+    engine: Engine = Depends(get_engine),
+) -> dict[str, Any]:
+    """Collect stop event.
+
+    Called when Claude finishes a turn. The hook sends Claude's reply and the
+    notes it wrote between tool calls (each linked by ``before_tool_use_id``
+    to the tool call it introduces), which the conversation view stitches in
+    between the turn's tool steps.
+    """
+    logger.debug(f"Stop: session={payload.session_id}")
+
+    _create_or_update_session(payload, db, request)
+
+    extra = payload.model_extra or {}
+    notes = extra.get("notes")
+    event = Event.from_hook_payload(payload)
+    event.hook_type = "Stop"
+    event.tool_result = {
+        "reply": extra.get("reply"),
+        "notes": notes if isinstance(notes, list) else [],
+        "truncated": bool(extra.get("capture_truncated")),
+    }
+    # Kept in tool_result; don't store the text twice.
+    if event.raw_payload:
+        for key in ("reply", "notes", "capture_truncated"):
+            event.raw_payload.pop(key, None)
+
+    db.save_event(event)
+    db.increment_session_event_count(payload.session_id)
+    await engine.enqueue(event)
+
+    return {"status": "received"}
+
+
 @router.post("/subagent-stop")
 async def collect_subagent_stop(
     payload: HookPayload,
