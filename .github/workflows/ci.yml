@@ -47,3 +47,11 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: dashboard
+
+      - name: Check committed dashboard build is up to date
+        run: |
+          git add -N agentsleak/static/dashboard
+          git diff --exit-code --stat -- agentsleak/static/dashboard || {
+            echo "::error::agentsleak/static/dashboard is stale. Run 'npm run build' in dashboard/ and commit the result."
+            exit 1
+          }

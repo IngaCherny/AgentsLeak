@@ -42,7 +42,7 @@ AI coding agents read files, execute shell commands, fetch URLs, and write code.
 
 ## Quick Start
 
-Requires **Python 3.11+**, **Node.js 18+**, and **jq**.
+Requires **Python 3.11+** and **jq**. Node.js is only needed for dashboard development.
 
 ```bash
 git clone https://github.com/IngaCherny/AgentsLeak.git
@@ -50,7 +50,31 @@ cd AgentsLeak
 ./scripts/start.sh
 ```
 
-That's it. The start script creates a virtual environment, installs all dependencies, hooks into Claude Code, and launches both the backend (`http://localhost:3827`) and dashboard (`http://localhost:5173`).
+That's it. The start script creates a virtual environment, installs the (pure-Python) dependencies, hooks into Claude Code, and launches the backend, which also serves the prebuilt dashboard at `http://localhost:3827`.
+
+### Choose what gets monitored
+
+On first run, `start.sh` asks whether to monitor **all** Claude Code sessions or only **specific project folders**, and remembers the answer (`~/.agentsleak/scope.conf`). You can also set it directly:
+
+```bash
+./scripts/start.sh --global                        # every session on this machine
+./scripts/start.sh --project ~/code/app-a --project ~/code/app-b
+./scripts/start.sh --reconfigure                   # ask again
+```
+
+Or change it at any time without restarting, using `scripts/set-scope.sh`:
+
+```bash
+./scripts/set-scope.sh status                      # what is monitored right now
+./scripts/set-scope.sh global
+./scripts/set-scope.sh project ~/code/app-a        # replace the project list
+./scripts/set-scope.sh add ~/code/app-b            # add a project
+./scripts/set-scope.sh remove ~/code/app-a         # stop monitoring a project
+```
+
+Switching scope removes AgentsLeak hooks from the old location, so events are never recorded twice. Your own Claude Code hooks are left untouched.
+
+Working on the dashboard? Run `./scripts/start.sh --dev` to use the Vite dev server with hot reload on `http://localhost:5173` (requires Node.js 18+).
 
 > Restart any open Claude Code sessions after installation — existing sessions won't pick up the hooks until restarted.
 
@@ -61,11 +85,13 @@ If you prefer to set things up step by step:
 ```bash
 # Backend
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-agentsleak --host 127.0.0.1 --port 3827
+pip install -e .            # add ".[dev]" for tests/linters
+agentsleak --host 127.0.0.1 --port 3827   # dashboard served at http://localhost:3827
 
-# Dashboard (in a second terminal)
+# Dashboard development only (in a second terminal, needs Node.js 18+)
 cd dashboard && npm install && npm run dev
+# After changing the dashboard, rebuild the bundled copy and commit it:
+#   npm run build   → writes agentsleak/static/dashboard/
 
 # Install hooks (Claude Code)
 ./hooks/install.sh

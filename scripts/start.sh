@@ -4,6 +4,42 @@
 
 set -e
 
+# Usage: ./scripts/start.sh [--dev] [--global | --project [DIR]]... [--reconfigure]
+#   --dev            run the Vite dev server (hot reload, needs Node.js) instead
+#                    of the prebuilt dashboard served by the backend
+#   --global         monitor every Claude Code session on this machine
+#   --project [DIR]  monitor only sessions started in DIR (default: the folder
+#                    you ran this from); repeat for several projects
+#   --reconfigure    ask again which sessions to monitor
+# Without scope flags the saved choice is reused (see scripts/set-scope.sh).
+DEV_MODE=false
+SCOPE_ARG=""
+SCOPE_PROJECTS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dev) DEV_MODE=true ;;
+        --global) SCOPE_ARG=global ;;
+        --reconfigure) SCOPE_ARG=choose ;;
+        --project=*) SCOPE_ARG=project; SCOPE_PROJECTS+=("${1#--project=}") ;;
+        --project)
+            SCOPE_ARG=project
+            if [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
+                SCOPE_PROJECTS+=("$2")
+                shift
+            fi
+            ;;
+        -h|--help)
+            sed -n '7,14p' "$0" | sed 's/^# //'
+            exit 0
+            ;;
+        *) echo "Unknown option: $1 (see --help)" >&2; exit 1 ;;
+    esac
+    shift
+done
+
+# Relative --project paths are resolved from where the user ran the script.
+export AGENTSLEAK_CALLER_DIR="$PWD"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
@@ -28,13 +64,22 @@ if ! command -v python3 &> /dev/null; then
 fi
 python3 --version
 
-# Check Node version
-echo -e "${YELLOW}Checking Node.js...${NC}"
-if ! command -v node &> /dev/null; then
-    echo -e "${RED}Node.js is required but not installed.${NC}"
-    exit 1
+# Node.js is only needed for dashboard development (or if the prebuilt
+# dashboard is missing from this checkout).
+PREBUILT_DASHBOARD="$PROJECT_DIR/agentsleak/static/dashboard/index.html"
+if [ "$DEV_MODE" = false ] && [ ! -f "$PREBUILT_DASHBOARD" ]; then
+    echo -e "${YELLOW}Prebuilt dashboard not found — falling back to dev mode (requires Node.js).${NC}"
+    DEV_MODE=true
 fi
-node --version
+
+if [ "$DEV_MODE" = true ]; then
+    echo -e "${YELLOW}Checking Node.js...${NC}"
+    if ! command -v node &> /dev/null; then
+        echo -e "${RED}Node.js is required for --dev mode but not installed.${NC}"
+        exit 1
+    fi
+    node --version
+fi
 
 echo
 
@@ -48,15 +93,17 @@ source .venv/bin/activate
 
 # Install Python dependencies
 echo -e "${YELLOW}Installing Python dependencies...${NC}"
-pip install -e ".[dev]" --quiet
+pip install -e . --quiet
 
-# Install dashboard dependencies
-echo -e "${YELLOW}Installing dashboard dependencies...${NC}"
-cd dashboard
-if [ ! -d "node_modules" ]; then
-    npm install --silent
+# Install dashboard dependencies (dev mode only)
+if [ "$DEV_MODE" = true ]; then
+    echo -e "${YELLOW}Installing dashboard dependencies...${NC}"
+    cd dashboard
+    if [ ! -d "node_modules" ]; then
+        npm install --silent
+    fi
+    cd ..
 fi
-cd ..
 
 echo
 echo -e "${GREEN}✓ Dependencies installed${NC}"
@@ -68,8 +115,19 @@ mkdir -p ~/.agentsleak
 # Install hooks into Claude Code (idempotent — safe to re-run)
 echo -e "${YELLOW}Installing hooks into Claude Code...${NC}"
 if command -v jq &> /dev/null; then
-    bash "$PROJECT_DIR/hooks/install.sh" --unattended
-    echo -e "${GREEN}✓ Hooks installed${NC}"
+    SET_SCOPE="$PROJECT_DIR/scripts/set-scope.sh"
+    if [ "$SCOPE_ARG" = project ]; then
+        bash "$SET_SCOPE" project ${SCOPE_PROJECTS[@]+"${SCOPE_PROJECTS[@]}"}
+    elif [ -n "$SCOPE_ARG" ]; then
+        bash "$SET_SCOPE" "$SCOPE_ARG"
+    elif [ -f "$HOME/.agentsleak/scope.conf" ]; then
+        bash "$SET_SCOPE" apply
+    elif [ -t 0 ]; then
+        bash "$SET_SCOPE" choose
+    else
+        bash "$SET_SCOPE" global
+    fi
+    bash "$SET_SCOPE" status
 else
     echo -e "${RED}jq is required for hook installation. Install it with: brew install jq${NC}"
     echo -e "${YELLOW}Skipping hook installation — you can run ./hooks/install.sh manually after installing jq${NC}"
@@ -105,24 +163,31 @@ if ! kill -0 $BACKEND_PID 2>/dev/null; then
 fi
 echo -e "${GREEN}✓ Backend running (PID: $BACKEND_PID)${NC}"
 
-# Start dashboard
-echo -e "${BLUE}Starting dashboard on http://localhost:${DASHBOARD_PORT}...${NC}"
-cd dashboard
-npm run dev -- --port "$DASHBOARD_PORT" &
-DASHBOARD_PID=$!
-cd ..
-sleep 3
+# Start dashboard: Vite dev server in dev mode, otherwise the backend serves
+# the prebuilt dashboard itself.
+if [ "$DEV_MODE" = true ]; then
+    echo -e "${BLUE}Starting dashboard dev server on http://localhost:${DASHBOARD_PORT}...${NC}"
+    cd dashboard
+    npm run dev -- --port "$DASHBOARD_PORT" &
+    DASHBOARD_PID=$!
+    cd ..
+    sleep 3
+    DASHBOARD_URL="http://localhost:${DASHBOARD_PORT}"
+else
+    DASHBOARD_URL="http://${AGENTSLEAK_HOST}:${AGENTSLEAK_PORT}"
+fi
 
 echo
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}  AgentsLeak is running!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo
-echo -e "  ${BLUE}Dashboard:${NC}  http://localhost:${DASHBOARD_PORT}"
+echo -e "  ${BLUE}Dashboard:${NC}  ${DASHBOARD_URL}"
 echo -e "  ${BLUE}API:${NC}        http://${AGENTSLEAK_HOST}:${AGENTSLEAK_PORT}"
 echo -e "  ${BLUE}API Docs:${NC}   http://${AGENTSLEAK_HOST}:${AGENTSLEAK_PORT}/docs"
 echo
-echo -e "  ${GREEN}Hooks are installed. Restart any open Claude Code sessions to start monitoring.${NC}"
+echo -e "  ${GREEN}Restart Claude Code sessions in the monitored scope to pick up the hooks.${NC}"
+echo -e "  Change scope anytime: ./scripts/set-scope.sh (status | global | project DIR...)"
 echo
 echo -e "  ${YELLOW}Press Ctrl+C to stop${NC}"
 echo

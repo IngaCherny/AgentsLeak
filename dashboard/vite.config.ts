@@ -11,6 +11,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Built into the Python package so the backend can serve it without Node.
+  build: {
+    outDir: '../agentsleak/static/dashboard',
+    emptyOutDir: true,
+  },
   server: {
     port: 5173,
     proxy: {

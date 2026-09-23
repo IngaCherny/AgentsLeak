@@ -291,7 +291,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     # Mount static files for dashboard (if exists)
-    dashboard_path = Path(__file__).parent.parent / "dashboard" / "dist"
+    # Prefer the prebuilt dashboard shipped inside the package; fall back to a
+    # local `dashboard/dist` build from older checkouts.
+    dashboard_path = Path(__file__).parent / "static" / "dashboard"
+    if not (dashboard_path / "index.html").is_file():
+        dashboard_path = Path(__file__).parent.parent / "dashboard" / "dist"
     if dashboard_path.exists():
         # Serve static assets (JS, CSS, etc.)
         app.mount(
