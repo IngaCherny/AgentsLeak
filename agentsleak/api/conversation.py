@@ -12,7 +12,8 @@ A turn is one user prompt and everything Claude did for it:
 - Steps merge the Pre/Post/Failure/Permission events of one tool call by
   ``tool_use_id``.
 - The Stop event supplies the reply and Claude's mid-turn notes; each note
-  goes before the step it introduces (``before_tool_use_id``).
+  goes before the step it introduces (``before_tool_use_id``). Other agents'
+  turn-end events arrive as Stop too, with a reply and no notes.
 - Tool calls made by a subagent (``agent_id``) nest under the Agent step that
   launched it.
 
@@ -244,7 +245,9 @@ def build_conversation(
                 if turn.prompt is not None:
                     turn.prompt["slash_command"] = (event.tool_input or {}).get("skill")
                 continue
-            text = raw.get("prompt") if isinstance(raw.get("prompt"), str) else ""
+            # Claude Code sends `prompt`; the other agents' adapters send `query`.
+            prompt_text = raw.get("prompt") or raw.get("query")
+            text = prompt_text if isinstance(prompt_text, str) else ""
             if _TASK_NOTIFICATION_RE.match(text):
                 turn = turn_for(key, "task_notification")
                 turn.task = _parse_task_notification(text)
@@ -276,7 +279,10 @@ def build_conversation(
         turn.touch(event.timestamp)
 
         if hook == "Stop":
-            turn.stop = event
+            # Some agents end a turn twice (Cursor: afterAgentResponse with the
+            # reply, then stop without it); a text-less one never replaces a reply.
+            if turn.stop is None or (event.tool_result or {}).get("reply"):
+                turn.stop = event
             continue
         if hook == "SubagentStop":
             reply = raw.get("last_assistant_message")

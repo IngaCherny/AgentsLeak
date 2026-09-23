@@ -9,7 +9,7 @@
 # 2. Creates ~/.agentsleak/hooks/ directories (reuses existing)
 # 3. Copies common.sh + cursor-hook.sh to ~/.agentsleak/hooks/
 # 4. Backs up existing ~/.cursor/hooks.json if present
-# 5. Writes ~/.cursor/hooks.json with all 6 events
+# 5. Writes ~/.cursor/hooks.json with all wired events
 # 6. Creates ~/.agentsleak/config.env if not exists
 #
 # Usage:
@@ -178,7 +178,7 @@ configure_cursor() {
 
     info "Configuring Cursor hooks..."
 
-    # Build the hooks.json config — 9 events per official Cursor hooks API
+    # Build the hooks.json config — 10 events per official Cursor hooks API
     local hook_config
     hook_config=$(jq -n --arg cmd "$hook_command" '{
         version: 1,
@@ -191,6 +191,7 @@ configure_cursor() {
             subagentStart: [{ command: $cmd }],
             subagentStop: [{ command: $cmd }],
             beforeSubmitPrompt: [{ command: $cmd }],
+            afterAgentResponse: [{ command: $cmd }],
             stop: [{ command: $cmd }]
         }
     }')

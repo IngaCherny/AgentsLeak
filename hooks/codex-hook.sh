@@ -16,8 +16,8 @@
 # agentsleak/models/events.py). That's why PreToolUse translation below is a
 # near pass-through rather than a reshape.
 #
-# Codex CLI events wired to AgentsLeak (8 of its ~12 documented events, mirroring
-# exactly which events Claude Code's own install.sh wires — see hooks/install.sh):
+# Codex CLI events wired to AgentsLeak (mirroring which events Claude Code's own
+# install.sh wires — see hooks/install.sh):
 #   SessionStart      -> /api/collect/session-start       (async)
 #   SessionEnd        -> /api/collect/session-end          (async)
 #   PreToolUse        -> /api/collect/pre-tool-use         (sync, can block)
@@ -29,11 +29,13 @@
 #   UserPromptSubmit  -> /api/collect/user-prompt-submit   (async)
 #   SubagentStart     -> /api/collect/subagent-start       (async)
 #   SubagentStop      -> /api/collect/subagent-stop        (async)
+#   Stop              -> /api/collect/stop                 (async — the turn's
+#                         reply, from last_assistant_message; answers {})
 #
 # Deliberately NOT wired:
-#   PostCompact, Stop, Interrupt — Claude Code's own install.sh doesn't wire
-#   PostCompact or Stop either (no matching collector endpoint/semantics), and
-#   Interrupt has no equivalent lifecycle concept in AgentsLeak's data model.
+#   PostCompact, Interrupt — Claude Code's own install.sh doesn't wire
+#   PostCompact either, and Interrupt has no equivalent lifecycle concept in
+#   AgentsLeak's data model.
 #
 # NOTE: this adapter was built from Codex CLI's published docs, not a live
 # install. Codex requires reviewing/trusting a hook definition before it runs
@@ -176,6 +178,21 @@ translate_payload() {
                     }
                 }' 2>/dev/null
             ;;
+        Stop)
+            echo "$codex_json" | jq \
+                '{
+                    session_id: (.session_id // "codex-unknown"),
+                    hook_type: "Stop",
+                    reply: (.last_assistant_message // null),
+                    session_cwd: (.cwd // null),
+                    session_source: "codex",
+                    transcript_path: (.transcript_path // null),
+                    _codex: {
+                        turn_id: (.turn_id // null),
+                        stop_hook_active: (.stop_hook_active // null)
+                    }
+                }' 2>/dev/null
+            ;;
         *)
             log_error "Unknown or unwired Codex CLI event: $event_name"
             return 1
@@ -241,6 +258,7 @@ get_endpoint() {
         UserPromptSubmit)   echo "/api/collect/user-prompt-submit" ;;
         SubagentStart)      echo "/api/collect/subagent-start" ;;
         SubagentStop)       echo "/api/collect/subagent-stop" ;;
+        Stop)               echo "/api/collect/stop" ;;
         *)                  echo "" ;;
     esac
 }
@@ -311,6 +329,10 @@ main() {
         exit 0
     fi
 
+    if [[ "$event_name" == "Stop" ]]; then
+        agentsleak_json=$(apply_reply_capture "$agentsleak_json")
+    fi
+
     # Enrich with metadata
     local enriched_json
     enriched_json=$(enrich_payload "$agentsleak_json")
@@ -330,6 +352,10 @@ main() {
     else
         send_to_collector_async "$endpoint" "$enriched_json"
         log_debug "Async event sent: $event_name"
+        # Codex expects JSON on stdout from Stop; {} lets the turn end.
+        if [[ "$event_name" == "Stop" ]]; then
+            echo '{}'
+        fi
     fi
 
     exit 0

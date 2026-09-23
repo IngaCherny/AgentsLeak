@@ -9,7 +9,7 @@
 #
 # Based on official Cursor hooks API: https://cursor.com/docs/agent/hooks
 #
-# Cursor hook events handled (9 total):
+# Cursor hook events handled (10 total):
 #   sessionStart        → /api/collect/session-start       (sync)
 #   sessionEnd          → /api/collect/session-end          (async)
 #   preToolUse          → /api/collect/pre-tool-use         (sync, can block)
@@ -18,7 +18,8 @@
 #   subagentStart       → /api/collect/subagent-start       (sync)
 #   subagentStop        → /api/collect/subagent-stop        (sync)
 #   beforeSubmitPrompt  → /api/collect/user-prompt-submit   (sync)
-#   stop                → /api/collect/session-end          (sync)
+#   stop                → /api/collect/stop                 (sync — turn end, no text)
+#   afterAgentResponse  → /api/collect/stop                 (async — the reply, from text)
 #
 # Cursor universal fields captured from every payload:
 #   conversation_id  → session_id
@@ -177,15 +178,35 @@ translate_payload() {
                 }' 2>/dev/null
             ;;
         stop)
+            # Fires when the agent loop ends, i.e. once per turn — a turn end,
+            # never a session end (sessionEnd is its own event). Carries no
+            # reply text; afterAgentResponse brings that.
             echo "$cursor_json" | jq \
                 '{
                     session_id: (.conversation_id // "cursor-unknown"),
-                    hook_type: "SessionEnd",
+                    hook_type: "Stop",
+                    reply: null,
                     session_cwd: (.workspace_roots[0] // null),
                     session_source: "cursor",
                     _cursor: {
                         status: (.status // null),
-                        loop_count: (.loop_count // null)
+                        loop_count: (.loop_count // null),
+                        generation_id: (.generation_id // null)
+                    }
+                }' 2>/dev/null
+            ;;
+        afterAgentResponse)
+            echo "$cursor_json" | jq \
+                '{
+                    session_id: (.conversation_id // "cursor-unknown"),
+                    hook_type: "Stop",
+                    reply: (.text // null),
+                    session_cwd: (.workspace_roots[0] // null),
+                    session_source: "cursor",
+                    transcript_path: (.transcript_path // null),
+                    _cursor: {
+                        generation_id: (.generation_id // null),
+                        model: (.model // null)
                     }
                 }' 2>/dev/null
             ;;
@@ -280,7 +301,8 @@ get_endpoint() {
         subagentStart)       echo "/api/collect/subagent-start" ;;
         subagentStop)        echo "/api/collect/subagent-stop" ;;
         beforeSubmitPrompt)  echo "/api/collect/user-prompt-submit" ;;
-        stop)                echo "/api/collect/session-end" ;;
+        stop)                echo "/api/collect/stop" ;;
+        afterAgentResponse)  echo "/api/collect/stop" ;;
         *)                   echo "" ;;
     esac
 }
@@ -292,7 +314,7 @@ is_sync_event() {
         preToolUse|sessionStart|subagentStart|beforeSubmitPrompt|stop|subagentStop)
             return 0
             ;;
-        sessionEnd|postToolUse|postToolUseFailure)
+        sessionEnd|postToolUse|postToolUseFailure|afterAgentResponse)
             return 1
             ;;
         *)
@@ -355,6 +377,10 @@ main() {
     if [[ -z "$agentsleak_json" ]]; then
         log_error "Failed to translate payload for event: $event_name"
         exit 0
+    fi
+
+    if [[ "$endpoint" == "/api/collect/stop" ]]; then
+        agentsleak_json=$(apply_reply_capture "$agentsleak_json")
     fi
 
     # Enrich with metadata

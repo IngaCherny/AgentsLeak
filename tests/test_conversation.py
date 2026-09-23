@@ -149,6 +149,28 @@ class TestTurns:
         assert turns[0]["status"] == "complete"
 
 
+class TestOtherAgents:
+    """Cursor, Codex, Gemini, Windsurf: prompt as `query`, no prompt_id, reply-only Stop."""
+
+    def test_prompt_from_query_and_reply_from_stop(self):
+        events = [
+            ev("UserPromptSubmit", pid=None, query="list files"),
+            *call("t1", "ls", pid=None),
+            ev("Stop", pid=None, result={"reply": "Here they are.", "notes": [], "truncated": False}),
+        ]
+        turn = build(events)["turns"][0]
+        assert turn["prompt"]["text"] == "list files"
+        assert kinds(turn) == ["step:t1"]
+        assert turn["reply"]["text"] == "Here they are."
+        assert turn["status"] == "complete"
+
+    def test_text_less_stop_does_not_replace_the_reply(self):
+        # Cursor: afterAgentResponse (reply) then stop (no text) for one turn.
+        events = [prompt("go"), *call("t1", "ls"), stop("Done."), stop(None)]
+        turn = build(events)["turns"][0]
+        assert turn["reply"]["text"] == "Done."
+
+
 class TestStatus:
     def test_turn_without_stop_followed_by_another_is_interrupted(self):
         events = [prompt("one", "p1"), *call("t1", "a", "p1"), prompt("two", "p2"), stop("ok", pid="p2")]

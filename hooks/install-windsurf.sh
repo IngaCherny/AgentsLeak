@@ -205,7 +205,8 @@ configure_windsurf() {
             post_read_code: [{ command: $cmd }],
             post_write_code: [{ command: $cmd }],
             post_run_command: [{ command: $cmd }],
-            post_mcp_tool_use: [{ command: $cmd }]
+            post_mcp_tool_use: [{ command: $cmd }],
+            post_cascade_response: [{ command: $cmd }]
         }
     }')
 

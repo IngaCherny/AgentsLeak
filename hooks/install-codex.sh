@@ -211,7 +211,8 @@ configure_codex() {
             PreCompact: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
             UserPromptSubmit: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
             SubagentStart: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
-            SubagentStop: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }]
+            SubagentStop: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
+            Stop: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }]
         }
     }')
 

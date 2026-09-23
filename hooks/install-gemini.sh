@@ -206,7 +206,8 @@ configure_gemini() {
             AfterTool: [{ matcher: ".*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
             BeforeAgent: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
             PreCompress: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
-            Notification: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }]
+            Notification: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
+            AfterAgent: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }]
         }
     }')
 

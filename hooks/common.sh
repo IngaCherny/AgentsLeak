@@ -119,6 +119,29 @@ enrich_payload() {
                             }' 2>/dev/null || echo "$input_json"
 }
 
+# Apply the reply-capture settings to a turn-end payload that carries the
+# agent's reply as `.reply` (used by the non-Claude adapters; stop.sh does the
+# same inline, plus notes). Drops the text when capture is off, caps it at
+# AGENTSLEAK_MAX_REPLY_CHARS otherwise.
+# Input: JSON string as the first argument
+# Output: JSON with reply, notes: [] and capture_truncated set
+apply_reply_capture() {
+    local input_json="$1"
+
+    if [[ "${AGENTSLEAK_CAPTURE_RESPONSES}" == "0" ]]; then
+        echo "$input_json" | jq -c '. + {reply: null, notes: [], capture_truncated: false}'
+        return 0
+    fi
+
+    echo "$input_json" | jq -c --argjson max "$AGENTSLEAK_MAX_REPLY_CHARS" '
+        (.reply | if type == "string" and test("\\S") then . else null end) as $r
+        | . + {
+            reply: (if $r == null then null else $r[0:$max] end),
+            notes: [],
+            capture_truncated: ($r != null and ($r | length) > $max)
+          }'
+}
+
 # -----------------------------------------------------------------------------
 # HTTP Communication
 # -----------------------------------------------------------------------------

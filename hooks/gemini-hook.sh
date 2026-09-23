@@ -13,7 +13,7 @@
 # stdin/stdout, exit code semantics) — this adapter follows the same
 # translate -> route -> translate-back pattern as cursor-hook.sh.
 #
-# Gemini CLI events wired to AgentsLeak (6 of the 11 documented events):
+# Gemini CLI events wired to AgentsLeak (8 of the 11 documented events):
 #   SessionStart  -> /api/collect/session-start       (sync, advisory only)
 #   SessionEnd    -> /api/collect/session-end          (async)
 #   BeforeTool    -> /api/collect/pre-tool-use         (sync, can block)
@@ -24,13 +24,13 @@
 #                     Gemini's ToolPermission notification is the closest analog
 #                     to Claude Code's PermissionRequest, tagged under _gemini
 #                     so it's never conflated with a real approve/deny decision)
+#   AfterAgent    -> /api/collect/stop                  (async — once per turn,
+#                     the reply from prompt_response; a turn end, never a
+#                     session end)
 #
 # Deliberately NOT wired (no safe 1:1 equivalent in AgentsLeak's collector):
-#   AfterAgent, BeforeModel, AfterModel, BeforeToolSelection
-#   AgentsLeak has no model-request-level endpoint, and AfterAgent fires once
-#   per agent-loop turn rather than once per session — routing it to
-#   session-end would call db.end_session() mid-session and corrupt session
-#   state. Leaving these unwired is safer than a wrong mapping.
+#   BeforeModel, AfterModel, BeforeToolSelection
+#   AgentsLeak has no model-request-level endpoint.
 #
 # NOTE: this adapter was built from Gemini CLI's published docs, not a live
 # install. Verify the exact matcher/response schema against your installed
@@ -152,6 +152,20 @@ translate_payload() {
                     }
                 }' 2>/dev/null
             ;;
+        AfterAgent)
+            echo "$gemini_json" | jq \
+                '{
+                    session_id: (.session_id // "gemini-unknown"),
+                    hook_type: "Stop",
+                    reply: (.prompt_response // null),
+                    session_cwd: (.cwd // null),
+                    session_source: "gemini",
+                    transcript_path: (.transcript_path // null),
+                    _gemini: {
+                        stop_hook_active: (.stop_hook_active // null)
+                    }
+                }' 2>/dev/null
+            ;;
         *)
             log_error "Unknown or unwired Gemini CLI event: $event_name"
             return 1
@@ -210,6 +224,7 @@ get_endpoint() {
         BeforeAgent)    echo "/api/collect/user-prompt-submit" ;;
         PreCompress)    echo "/api/collect/pre-compact" ;;
         Notification)   echo "/api/collect/permission-request" ;;
+        AfterAgent)     echo "/api/collect/stop" ;;
         *)              echo "" ;;
     esac
 }
@@ -221,7 +236,7 @@ is_sync_event() {
         BeforeTool|SessionStart|BeforeAgent)
             return 0
             ;;
-        SessionEnd|AfterTool|PreCompress|Notification)
+        SessionEnd|AfterTool|PreCompress|Notification|AfterAgent)
             return 1
             ;;
         *)
@@ -277,6 +292,10 @@ main() {
     if [[ -z "$agentsleak_json" ]]; then
         log_error "Failed to translate payload for event: $event_name"
         exit 0
+    fi
+
+    if [[ "$event_name" == "AfterAgent" ]]; then
+        agentsleak_json=$(apply_reply_capture "$agentsleak_json")
     fi
 
     # Enrich with metadata

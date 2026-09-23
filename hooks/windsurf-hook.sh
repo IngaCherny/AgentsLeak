@@ -23,7 +23,7 @@
 # tool-use event via the collector's own _create_or_update_session(), same as
 # it already does when any hook fires before a session record exists.
 #
-# Cascade hook events wired to AgentsLeak (9 of its 12 documented events):
+# Cascade hook events wired to AgentsLeak (10 of its 12 documented events):
 #   pre_read_code    -> /api/collect/pre-tool-use         (sync, can block)
 #   pre_write_code   -> /api/collect/pre-tool-use         (sync, can block)
 #   pre_run_command  -> /api/collect/pre-tool-use         (sync, can block)
@@ -36,10 +36,13 @@
 #   post_write_code  -> /api/collect/post-tool-use        (async)
 #   post_run_command -> /api/collect/post-tool-use        (async)
 #   post_mcp_tool_use-> /api/collect/post-tool-use        (async)
+#   post_cascade_response -> /api/collect/stop            (async — once per turn;
+#                        tool_info.response is markdown for the whole turn,
+#                        planner text and tool actions included)
 #
-# Deliberately NOT wired: post_cascade_response, post_cascade_response_with_transcript,
-# post_setup_worktree — none has a matching session/tool-lifecycle concept in
-# AgentsLeak's collector (same reasoning as skipping Gemini's AfterAgent).
+# Deliberately NOT wired: post_cascade_response_with_transcript (same turn as
+# post_cascade_response, as a transcript file instead of text), post_setup_worktree
+# (no matching session/tool-lifecycle concept in AgentsLeak's collector).
 #
 # session_cwd availability is uneven across events: Cascade's stdin payload
 # only includes a cwd field for pre/post_run_command's tool_info — file
@@ -139,6 +142,19 @@ translate_payload() {
                     session_source: "windsurf"
                 }' 2>/dev/null
             ;;
+        post_cascade_response)
+            echo "$cascade_json" | jq \
+                '{
+                    session_id: (.trajectory_id // "windsurf-unknown"),
+                    hook_type: "Stop",
+                    reply: (.tool_info.response // null),
+                    session_source: "windsurf",
+                    _windsurf: {
+                        execution_id: (.execution_id // null),
+                        model_name: (.model_name // null)
+                    }
+                }' 2>/dev/null
+            ;;
         *)
             log_error "Unknown or unwired Cascade event: $event_name"
             return 1
@@ -159,6 +175,7 @@ get_endpoint() {
         pre_run_command|post_run_command) echo "/api/collect/pre-tool-use" ;;
         pre_mcp_tool_use|post_mcp_tool_use) echo "/api/collect/pre-tool-use" ;;
         pre_user_prompt)                  echo "/api/collect/user-prompt-submit" ;;
+        post_cascade_response)            echo "/api/collect/stop" ;;
         *)                                 echo "" ;;
     esac
 }
@@ -226,6 +243,10 @@ main() {
     if [[ -z "$agentsleak_json" ]]; then
         log_error "Failed to translate payload for event: $event_name"
         exit 0
+    fi
+
+    if [[ "$event_name" == "post_cascade_response" ]]; then
+        agentsleak_json=$(apply_reply_capture "$agentsleak_json")
     fi
 
     local enriched_json
