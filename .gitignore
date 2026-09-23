@@ -73,3 +73,6 @@ htmlcov/
 
 # Demo sandbox
 demo/
+
+# Local setup guide (published separately)
+docs/setup-guide.html
