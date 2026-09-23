@@ -195,7 +195,7 @@ User: "Block any command that downloads and pipes to bash"
     "categories": ["command_exec"],
     "tools": [],
     "conditions": [
-      {"field": "tool_input.command", "operator": "matches", "value": "(curl|wget).*\\\\|.*(bash|sh|zsh)", "case_sensitive": false}
+      {"field": "tool_input.command", "operator": "matches", "value": "(curl|wget)\\\\b[^|]*\\\\|\\\\s*(sudo\\\\s+)?(bash|sh|zsh)\\\\b", "case_sensitive": false}
     ],
     "condition_logic": "all",
     "action": "block",
