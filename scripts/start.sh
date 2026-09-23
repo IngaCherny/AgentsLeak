@@ -11,7 +11,8 @@ set -e
 #   --project [DIR]  monitor only sessions started in DIR (default: the folder
 #                    you ran this from); repeat for several projects
 #   --reconfigure    ask again which sessions to monitor
-# Without scope flags the saved choice is reused (see scripts/set-scope.sh).
+# Without scope flags the saved choice is reused (see scripts/set-scope.sh);
+# on first run the default is the folder you ran from, never global.
 DEV_MODE=false
 SCOPE_ARG=""
 SCOPE_PROJECTS=()
@@ -29,7 +30,7 @@ while [ $# -gt 0 ]; do
             fi
             ;;
         -h|--help)
-            sed -n '7,14p' "$0" | sed 's/^# //'
+            sed -n '7,15p' "$0" | sed 's/^# //'
             exit 0
             ;;
         *) echo "Unknown option: $1 (see --help)" >&2; exit 1 ;;
@@ -125,7 +126,8 @@ if command -v jq &> /dev/null; then
     elif [ -t 0 ]; then
         bash "$SET_SCOPE" choose
     else
-        bash "$SET_SCOPE" global
+        # Non-interactive first run: never touch the global config by default.
+        bash "$SET_SCOPE" project "$AGENTSLEAK_CALLER_DIR"
     fi
     bash "$SET_SCOPE" status
 else

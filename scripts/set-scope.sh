@@ -256,17 +256,17 @@ cmd_choose() {
     [[ -t 0 ]] || fail "Not an interactive terminal. Use '$0 global' or '$0 project DIR'."
     echo ""
     echo "Which Claude Code sessions should AgentsLeak monitor?"
-    echo "  1) All sessions on this machine (global)"
-    echo "  2) Only sessions started in specific project folders"
+    echo "  1) Only sessions started in this folder: ${CALLER_DIR}"
+    echo "  2) Only sessions started in other project folders"
+    echo "  3) All sessions on this machine (writes the global ~/.claude/settings.json)"
     echo ""
     local choice
-    read -r -p "Choose [1/2] (default 1): " choice
+    read -r -p "Choose [1/2/3] (default 1): " choice
     case "${choice:-1}" in
-        1) cmd_global ;;
+        1) cmd_project false "$CALLER_DIR" ;;
         2)
             echo ""
             echo "Enter project folders, one per line. Empty line when done."
-            echo "(Press Enter right away to use: ${CALLER_DIR})"
             local dirs=() line
             while IFS= read -r -p "  folder: " line; do
                 [[ -z "$line" ]] && break
@@ -275,6 +275,7 @@ cmd_choose() {
             [[ ${#dirs[@]} -eq 0 ]] && dirs=("$CALLER_DIR")
             cmd_project false "${dirs[@]}"
             ;;
+        3) cmd_global ;;
         *) fail "Invalid choice: $choice" ;;
     esac
 }

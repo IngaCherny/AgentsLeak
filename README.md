@@ -54,7 +54,7 @@ That's it. The start script creates a virtual environment, installs the (pure-Py
 
 ### Choose what gets monitored
 
-On first run, `start.sh` asks whether to monitor **all** Claude Code sessions or only **specific project folders**, and remembers the answer (`~/.agentsleak/scope.conf`). You can also set it directly:
+On first run, `start.sh` asks which Claude Code sessions to monitor and remembers the answer (`~/.agentsleak/scope.conf`). The default is **only the folder you ran it from**; the global `~/.claude/settings.json` is written only if you choose **all sessions** or pass `--global`. You can also set it directly:
 
 ```bash
 ./scripts/start.sh --global                        # every session on this machine
