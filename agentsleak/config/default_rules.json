@@ -4,13 +4,13 @@
     "name": "AgentsLeak Default Detection Rules",
     "description": "Built-in detection rules for identifying malicious AI agent behavior",
     "author": "AgentsLeak Security Team",
-    "last_updated": "2025-01-15"
+    "last_updated": "2026-09-23"
   },
   "rules": [
     {
       "id": "SENS-001",
       "name": "Sensitive file access",
-      "description": "Detects read access to sensitive configuration files that may contain secrets, API keys, or credentials. Includes .env files, credential files, and cryptographic key files.",
+      "description": "Detects reads of files that typically hold secrets: .env files (not .env.example/.sample/.template), credentials and secrets files (including ~/.aws/credentials), and private key files.",
       "enabled": true,
       "severity": "high",
       "action": "alert",
@@ -19,16 +19,20 @@
         "event": {
           "category": "file_read",
           "metadata.file_path": {
-            "regex": ".*(\\.env|\\.env\\.[a-zA-Z0-9_]+|credentials\\.[a-zA-Z0-9_]+|secrets\\.[a-zA-Z0-9_]+|\\.pem|\\.key|secret_key|api_key|apikey)$"
+            "regex": "^(?!.*\\.(?:example|sample|template|dist|tmpl)$).*(?:^|/)(?:\\.env(?:\\.[\\w-]+)?|credentials(?:\\.(?:json|ya?ml|ini|txt|conf|cfg|csv|decoy))?|secrets?\\.(?:json|ya?ml|toml|ini|env|txt|decoy)|[\\w.-]+\\.(?:pem|key|p12|pfx)|secret_key|api_?key)$"
           }
         }
       },
-      "tags": ["credentials", "secrets", "sensitive-data"]
+      "tags": [
+        "credentials",
+        "secrets",
+        "sensitive-data"
+      ]
     },
     {
       "id": "SENS-002",
       "name": "SSH key access",
-      "description": "Detects read or write access to SSH private keys, configuration, and known_hosts files. SSH keys provide authentication to remote systems and are high-value targets.",
+      "description": "Detects reads or writes of SSH private keys, SSH client config and authorized_keys. Public keys (*.pub) and known_hosts are not secret and are not flagged.",
       "enabled": true,
       "severity": "critical",
       "action": "alert",
@@ -36,19 +40,26 @@
         "type": "pattern",
         "event": {
           "category": {
-            "any_of": ["file_read", "file_write"]
+            "any_of": [
+              "file_read",
+              "file_write"
+            ]
           },
           "metadata.file_path": {
-            "regex": ".*\\.ssh/(id_[a-zA-Z0-9_]+|id_[a-zA-Z0-9_]+\\.pub|config|known_hosts|authorized_keys)$"
+            "regex": ".*/\\.ssh/(?:id_[\\w-]+|[\\w-]+_(?:rsa|ed25519|ecdsa|dsa)|config|authorized_keys)$"
           }
         }
       },
-      "tags": ["ssh", "authentication", "credentials"]
+      "tags": [
+        "ssh",
+        "authentication",
+        "credentials"
+      ]
     },
     {
       "id": "SENS-003",
       "name": "Git credentials access",
-      "description": "Detects read access to Git credential storage files including .git-credentials, .netrc, and .gitconfig files that may contain authentication tokens or passwords.",
+      "description": "Detects reads of stored git and HTTP credentials (.git-credentials, .netrc).",
       "enabled": true,
       "severity": "high",
       "action": "alert",
@@ -57,36 +68,15 @@
         "event": {
           "category": "file_read",
           "metadata.file_path": {
-            "regex": ".*((\\.git-credentials|\\.netrc|\\.gitconfig)|(/\\.config/git/credentials))$"
+            "regex": ".*(?:/\\.git-credentials|/\\.netrc|/\\.config/git/credentials)$"
           }
         }
       },
-      "tags": ["git", "credentials", "version-control"]
-    },
-    {
-      "id": "EXFIL-001",
-      "name": "Data exfiltration pattern",
-      "description": "Detects potential data exfiltration by identifying a sequence where a sensitive file is read followed by network access within 5 minutes. This pattern is commonly used to steal credentials or secrets.",
-      "enabled": true,
-      "severity": "critical",
-      "action": "block",
-      "conditions": {
-        "type": "sequence",
-        "window_seconds": 300,
-        "steps": [
-          {
-            "category": "file_read",
-            "metadata.file_path": {
-              "regex": ".*(\\.env|\\.env\\.[a-zA-Z0-9_]+|\\.pem|\\.key|credentials|secrets|password|api_key|\\.ssh/id_)"
-            }
-          },
-          {
-            "category": "network_access"
-          }
-        ]
-      },
-      "block_message": "Blocked: Potential data exfiltration detected. A sensitive file was read followed by network access. This pattern may indicate an attempt to steal credentials or secrets.",
-      "tags": ["exfiltration", "data-theft", "network"]
+      "tags": [
+        "git",
+        "credentials",
+        "version-control"
+      ]
     },
     {
       "id": "EXFIL-002",
@@ -98,13 +88,22 @@
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "curl\\s+.*(-d\\s*@|--data\\s*@|--data-binary\\s*@|-F\\s+['\"]?[a-zA-Z0-9_]+=@)"
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?curl\\b[^;&|\\n]*?(?:\\s-d\\s*@|--data(?:-binary|-raw|-urlencode)?[\\s=]+@|\\s-F\\s*['\\\"]?[\\w-]+=@|\\s-T\\s|--upload-file\\s)"
           }
         }
       },
-      "tags": ["exfiltration", "curl", "http"]
+      "tags": [
+        "exfiltration",
+        "curl",
+        "http"
+      ]
     },
     {
       "id": "RSHELL-001",
@@ -112,18 +111,27 @@
       "description": "Detects common reverse shell patterns including bash -i redirects, /dev/tcp socket connections, and Python socket-based reverse shells. These are used to establish unauthorized remote access.",
       "enabled": true,
       "severity": "critical",
-      "action": "block",
+      "action": "alert",
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "(bash\\s+-i\\s*>|/dev/tcp/|python[23]?\\s+.*socket.*connect|perl\\s+.*socket.*connect|ruby\\s+.*TCPSocket|php\\s+.*fsockopen)"
+            "regex": "(?:/dev/(?:tcp|udp)/|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:bash|sh)\\s+-i\\s*[>&]|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:python[23]?|perl|ruby|php)\\b[^\\n]*\\b(?:socket[^\\n]*connect|TCPSocket|fsockopen)|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?socat\\b[^;&|\\n]*exec:|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?mkfifo\\b[^\\n]*\\b(?:nc|ncat)\\b)"
           }
         }
       },
       "block_message": "Blocked: Reverse shell attempt detected. The command contains patterns commonly used to establish unauthorized remote access to the system.",
-      "tags": ["reverse-shell", "remote-access", "backdoor"]
+      "tags": [
+        "reverse-shell",
+        "remote-access",
+        "backdoor"
+      ]
     },
     {
       "id": "RSHELL-002",
@@ -131,65 +139,55 @@
       "description": "Detects netcat (nc/ncat) commands with execute flags that can spawn shells. This is a classic technique for creating backdoors and reverse shells.",
       "enabled": true,
       "severity": "critical",
-      "action": "block",
+      "action": "alert",
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "(nc|ncat|netcat)\\s+.*(-e\\s+|--exec\\s+|-c\\s+|--sh-exec\\s+)"
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:nc|ncat|netcat)\\s[^;&|\\n]*(?:-e\\s|--exec\\s|-c\\s|--sh-exec\\s)"
           }
         }
       },
       "block_message": "Blocked: Netcat command with execute option detected. This pattern is commonly used to create backdoors or reverse shells.",
-      "tags": ["reverse-shell", "netcat", "backdoor"]
-    },
-    {
-      "id": "EXEC-001",
-      "name": "Download and execute",
-      "description": "Detects a dangerous pattern where a file is downloaded (via curl, wget, or similar) and then executed within a short time window. This is a common attack technique for deploying malware.",
-      "enabled": true,
-      "severity": "critical",
-      "action": "block",
-      "conditions": {
-        "type": "sequence",
-        "window_seconds": 120,
-        "steps": [
-          {
-            "category": "bash_command",
-            "metadata.command": {
-              "regex": "(curl|wget|fetch)\\s+.*-o\\s+|>(\\s*[a-zA-Z0-9_/.-]+\\.sh)"
-            }
-          },
-          {
-            "category": "bash_command",
-            "metadata.command": {
-              "regex": "(bash|sh|python[23]?|perl|ruby|chmod\\s+\\+x)\\s+[a-zA-Z0-9_/.-]+"
-            }
-          }
-        ]
-      },
-      "block_message": "Blocked: Download and execute pattern detected. A file was downloaded and then executed, which is a common malware deployment technique.",
-      "tags": ["download-execute", "malware", "remote-code"]
+      "tags": [
+        "reverse-shell",
+        "netcat",
+        "backdoor"
+      ]
     },
     {
       "id": "EXEC-003",
       "name": "Pipe to shell interpreter",
-      "description": "Detects commands where the output of curl/wget is piped directly into a shell interpreter (bash, sh, python, etc.). This is a common technique used in README install instructions that bypasses file inspection, allowing arbitrary remote code execution.",
+      "description": "Detects piping a download straight into an interpreter (curl ... | bash) or running one via process/command substitution (bash <(curl ...), sh -c \"$(curl ...)\").",
       "enabled": true,
       "severity": "critical",
-      "action": "block",
+      "action": "alert",
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "(curl|wget)\\s+.*\\|\\s*(bash|sh|zsh|python[23]?|perl|ruby|node)"
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:curl|wget)\\b[^;&\\n]*?\\|\\s*(?:sudo\\s+)?(?:bash|sh|zsh|python[23]?|perl|ruby|node)(?=$|[\\s'\\\"])|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:bash|sh|zsh)\\s+(?:-c\\s+)?['\\\"]?(?:<\\(|\\$\\()\\s*(?:curl|wget)\\b"
           }
         }
       },
       "block_message": "Blocked: Pipe-to-shell pattern detected. The command downloads content and pipes it directly to a shell interpreter, enabling arbitrary remote code execution without inspection.",
-      "tags": ["pipe-to-shell", "download-execute", "remote-code"]
+      "tags": [
+        "pipe-to-shell",
+        "download-execute",
+        "remote-code"
+      ]
     },
     {
       "id": "EXEC-002",
@@ -202,25 +200,33 @@
         "type": "pattern",
         "event": {
           "category": {
-            "any_of": ["web_fetch", "bash_command"]
+            "any_of": [
+              "web_fetch",
+              "bash_command",
+              "network_access"
+            ]
           },
           "metadata": {
             "any_match": [
               {
                 "url": {
-                  "regex": "(raw\\.githubusercontent\\.com|gist\\.githubusercontent\\.com|pastebin\\.com|paste\\.ee|hastebin\\.com|ghostbin\\.).*\\.(sh|py|pl|rb|ps1)($|\\?)"
+                  "regex": "(?:raw\\.githubusercontent\\.com|gist\\.githubusercontent\\.com|pastebin\\.com|paste\\.ee|hastebin\\.com|ghostbin\\.).*\\.(?:sh|py|pl|rb|ps1)(?:$|\\?)"
                 }
               },
               {
                 "command": {
-                  "regex": "(curl|wget)\\s+.*(raw\\.githubusercontent\\.com|pastebin\\.com/raw|paste\\.ee/r).*\\.(sh|py|pl)"
+                  "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:curl|wget)\\b[^;&|\\n]*(?:raw\\.githubusercontent\\.com|gist\\.githubusercontent\\.com|pastebin\\.com/raw|paste\\.ee/r|hastebin\\.com/raw)\\S*\\.(?:sh|py|pl|rb|ps1)\\b"
                 }
               }
             ]
           }
         }
       },
-      "tags": ["script-download", "suspicious-url", "remote-code"]
+      "tags": [
+        "script-download",
+        "suspicious-url",
+        "remote-code"
+      ]
     },
     {
       "id": "PRIV-001",
@@ -232,13 +238,22 @@
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "(sudo\\s+|chmod\\s+777\\s+|chmod\\s+\\+s\\s+|chmod\\s+[0-7]*[4-7][0-7]{2}\\s+/|chown\\s+root|setuid|setgid)"
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:sudo\\s|pkexec\\s|doas\\s|setcap\\s|chown\\s+(?:-R\\s+)?root\\b|chmod\\s+(?:-R\\s+)?(?:777|[ugoa]*\\+s|[2467][0-7]{3})\\s)"
           }
         }
       },
-      "tags": ["privilege-escalation", "sudo", "permissions"]
+      "tags": [
+        "privilege-escalation",
+        "sudo",
+        "permissions"
+      ]
     },
     {
       "id": "PRIV-002",
@@ -256,28 +271,11 @@
           }
         }
       },
-      "tags": ["system-modification", "persistence", "configuration"]
-    },
-    {
-      "id": "SCOPE-001",
-      "name": "Out of project file access",
-      "description": "Detects file read or write operations outside of the session's designated working directory. AI agents should typically operate within their project scope.",
-      "enabled": true,
-      "severity": "low",
-      "action": "alert",
-      "conditions": {
-        "type": "pattern",
-        "event": {
-          "category": {
-            "any_of": ["file_read", "file_write"]
-          },
-          "metadata.file_path": {
-            "not_within": "{{session.cwd}}"
-          }
-        }
-      },
-      "context_required": ["session.cwd"],
-      "tags": ["scope-violation", "boundary", "project-escape"]
+      "tags": [
+        "system-modification",
+        "persistence",
+        "configuration"
+      ]
     },
     {
       "id": "SCOPE-002",
@@ -295,56 +293,44 @@
           }
         }
       },
-      "tags": ["reconnaissance", "system-info", "enumeration"]
-    },
-    {
-      "id": "ENUM-001",
-      "name": "Mass file enumeration",
-      "description": "Detects rapid file reading that may indicate automated scanning or enumeration. More than 50 file read operations within 60 seconds triggers this rule.",
-      "enabled": true,
-      "severity": "low",
-      "action": "alert",
-      "conditions": {
-        "type": "threshold",
-        "event": {
-          "category": "file_read"
-        },
-        "threshold": 50,
-        "window_seconds": 60,
-        "group_by": "session.id"
-      },
-      "tags": ["enumeration", "scanning", "reconnaissance"]
+      "tags": [
+        "reconnaissance",
+        "system-info",
+        "enumeration"
+      ]
     },
     {
       "id": "ENUM-002",
       "name": "Credential file scanning",
       "description": "Detects search operations (grep/glob) looking for files or content containing password, secret, api_key, or token patterns. This may indicate credential harvesting attempts.",
       "enabled": true,
-      "severity": "medium",
+      "severity": "low",
       "action": "alert",
       "conditions": {
         "type": "pattern",
         "event": {
           "category": {
-            "any_of": ["grep_search", "glob_search"]
+            "any_of": [
+              "grep_search",
+              "glob_search"
+            ]
           },
           "metadata": {
             "any_match": [
               {
                 "pattern": {
-                  "regex": "(password|passwd|secret|api[_-]?key|apikey|token|bearer|auth|credential|private[_-]?key)"
-                }
-              },
-              {
-                "search_pattern": {
-                  "regex": "\\*\\.(env|pem|key|secret|credential)"
+                  "regex": "(?i)(?:password|passwd|secret|api[_-]?key|apikey|private[_-]?key|BEGIN [A-Z ]*PRIVATE|AKIA|aws_secret|\\*\\.(?:env|pem|key)\\b|\\.env\\b|id_rsa|id_ed25519|\\.ssh/)"
                 }
               }
             ]
           }
         }
       },
-      "tags": ["credential-scan", "enumeration", "secrets"]
+      "tags": [
+        "credential-scan",
+        "enumeration",
+        "secrets"
+      ]
     },
     {
       "id": "EVASION-001",
@@ -356,49 +342,79 @@
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "(base64|openssl\\s+(enc|base64)|xxd)\\s+.*(\\.env|\\.pem|\\.key|credentials|secrets|password|\\.ssh/id_)"
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:base64|openssl\\s+(?:enc|base64)|xxd)\\b[^;&|\\n]*(?:\\.env\\b|\\.pem\\b|\\.key\\b|credentials|secrets|password|\\.ssh/id_)"
           }
         }
       },
-      "tags": ["evasion", "base64", "encoding", "exfiltration"]
+      "tags": [
+        "evasion",
+        "base64",
+        "encoding",
+        "exfiltration"
+      ]
     },
     {
       "id": "EVASION-002",
       "name": "One-liner network access via interpreter",
-      "description": "Detects python/node/ruby/perl one-liner commands that perform network operations. Agents may use these to bypass detection of curl/wget.",
+      "description": "Detects interpreter one-liners (python -c, node -e, ...) that open network connections — a way to reach the network without curl/wget. Commands that only target localhost are ignored.",
       "enabled": true,
       "severity": "high",
       "action": "alert",
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "(python[23]?|node|ruby|perl)\\s+-[ce]\\s+.*(requests|urllib|http\\.client|urlopen|fetch\\(|Net::HTTP|TCPSocket|IO::Socket|LWP)"
+            "regex": "(?s)^(?!.*(?:127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0|\\[::1\\])).*?(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:\\S*/)?(?:python[23]?|node|ruby|perl)\\s+-[ce]\\s+[^\\n]*(?:requests|urllib|http\\.client|urlopen|fetch\\(|Net::HTTP|TCPSocket|IO::Socket|LWP)"
           }
         }
       },
-      "tags": ["evasion", "one-liner", "interpreter", "network"]
+      "tags": [
+        "evasion",
+        "one-liner",
+        "interpreter",
+        "network"
+      ]
     },
     {
       "id": "EVASION-003",
-      "name": "Eval or command substitution evasion",
-      "description": "Detects use of eval, command substitution $(), or backtick execution to obfuscate network access or file operations.",
+      "name": "Eval of generated or encoded code",
+      "description": "Detects eval of command output, backticks, hex escapes or base64 — ways to hide the command that actually runs. Common shell-init evals (ssh-agent, brew shellenv, pyenv, ...) are ignored.",
       "enabled": true,
       "severity": "high",
       "action": "alert",
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "(eval\\s+.*\\$\\(|eval\\s+.*`|\\$\\(.*curl|\\$\\(.*wget|`.*curl|`.*wget|eval\\s+.*\\\\x)"
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?eval\\s+(?!['\\\"]?\\$\\((?:\\S*/)?(?:ssh-agent|brew\\s+shellenv|pyenv|rbenv|nodenv|direnv|conda|starship|zoxide|fnm|mise|opam)\\b)[^\\n]*?(?:\\$\\(|`|\\\\x[0-9a-fA-F]{2}|base64)"
           }
         }
       },
-      "tags": ["evasion", "obfuscation", "eval", "command-substitution"]
+      "tags": [
+        "evasion",
+        "obfuscation",
+        "eval",
+        "command-substitution"
+      ]
     },
     {
       "id": "EVASION-004",
@@ -410,13 +426,231 @@
       "conditions": {
         "type": "pattern",
         "event": {
-          "category": "bash_command",
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
           "metadata.command": {
-            "regex": "(dig\\s+.*\\$\\(|nslookup\\s+.*\\$\\(|ping\\s+-[cp]\\s+.*\\$\\(|dig\\s+TXT|xxd.*\\|.*dig)"
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:dig|nslookup|host)\\s[^\\n]*\\$\\(|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?ping\\s+-[cp]\\s[^\\n]*\\$\\(|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?dig\\s[^;&|\\n]*\\bTXT\\b|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?xxd\\b[^\\n]*\\|\\s*(?:dig|nslookup)\\b"
           }
         }
       },
-      "tags": ["evasion", "dns-exfil", "covert-channel"]
+      "tags": [
+        "evasion",
+        "dns-exfil",
+        "covert-channel"
+      ]
+    },
+    {
+      "id": "TAMPER-001",
+      "name": "Agent or monitoring config tampering",
+      "description": "Detects changes to AI agent settings, hooks and MCP config (Claude Code, Cursor, Codex, Gemini, Windsurf) and to AgentsLeak's own files. An agent that edits these can grant itself permissions or switch monitoring off.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": [
+              "file_write",
+              "bash_command",
+              "network_access"
+            ]
+          },
+          "metadata": {
+            "any_match": [
+              {
+                "file_path": {
+                  "regex": ".*(?:\\.claude/settings(?:\\.local)?\\.json|\\.claude/hooks/|\\.agentsleak/|\\.cursor/(?:hooks|mcp)\\.json|\\.codex/(?:config\\.toml|hooks\\.json)|\\.gemini/settings\\.json|\\.codeium/windsurf/(?:hooks|mcp_config)\\.json|\\.windsurf/hooks\\.json|(?:^|/)\\.mcp\\.json|claude_desktop_config\\.json)"
+                }
+              },
+              {
+                "command": {
+                  "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:[^;&|\\n]*?(?:>>?|\\btee\\b|\\bsed\\s+-i|\\bperl\\s+-\\w*i|\\bmv\\b|\\bcp\\b|\\brm\\b|\\bln\\b|\\bchmod\\b|\\btruncate\\b)[^;&|\\n]*?(?:\\.claude/settings(?:\\.local)?\\.json|\\.claude/hooks/|\\.agentsleak/|\\.cursor/(?:hooks|mcp)\\.json|\\.codex/(?:config\\.toml|hooks\\.json)|\\.gemini/settings\\.json|\\.codeium/windsurf/(?:hooks|mcp_config)\\.json|\\.windsurf/hooks\\.json|(?:^|/)\\.mcp\\.json|claude_desktop_config\\.json)|sqlite3\\b[^\\n]*\\.agentsleak/\\S*\\.db[^\\n]*(?i:\\b(?:delete|update|drop|insert)\\b))"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "tags": [
+        "tampering",
+        "defense-evasion",
+        "agent-config"
+      ]
+    },
+    {
+      "id": "SENS-004",
+      "name": "Cloud and tool credential store access",
+      "description": "Detects reads of cloud CLI, container, package-registry and browser credential stores: gcloud, Azure, kubeconfig, Docker, npm/PyPI tokens, GitHub CLI, GPG, pass, macOS keychains, browser cookies and saved passwords.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "file_read",
+          "metadata.file_path": {
+            "regex": "(?:/\\.config/gcloud/(?:credentials\\.db|access_tokens\\.db|application_default_credentials\\.json|legacy_credentials/)|/\\.azure/(?:accessTokens\\.json|msal_token_cache)|/\\.kube/config$|/\\.docker/config\\.json$|/\\.npmrc$|/\\.pypirc$|/\\.config/gh/hosts\\.yml$|/\\.gnupg/|/\\.password-store/|/Library/Keychains/|/Google/Chrome/.*/(?:Cookies|Login Data)$|/Firefox/Profiles/.*/(?:cookies\\.sqlite|logins\\.json|key4\\.db)$)"
+          }
+        }
+      },
+      "tags": [
+        "credentials",
+        "cloud",
+        "browser",
+        "sensitive-data"
+      ]
+    },
+    {
+      "id": "SENS-005",
+      "name": "Secret file read via shell",
+      "description": "Detects shell commands that read or copy secret files (cat .env, head ~/.aws/credentials, grep TOKEN .env, cp ~/.ssh/id_rsa ...). Reads through the Read tool are covered by SENS-001..004.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
+          "metadata.command": {
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:cat|less|more|head|tail|bat|strings|xxd|od|base64|cp|scp|rsync|tar|zip|grep|rg|awk|sed|jq)\\s+(?:[^;&|\\n]*?[\\s/=~])?(?:\\.env(?:\\.(?!example|sample|template|dist)[\\w-]+)?|\\.aws/credentials|\\.ssh/(?:id_[\\w-]+|[\\w-]+_(?:rsa|ed25519|ecdsa))|\\.git-credentials|\\.netrc|\\.kube/config|\\.docker/config\\.json|\\.npmrc|\\.pypirc|\\.config/gh/hosts\\.yml|\\.config/gcloud/[\\w./-]+|[\\w.-]+\\.pem)(?=$|[\\s;&|)])"
+          }
+        }
+      },
+      "tags": [
+        "credentials",
+        "secrets",
+        "sensitive-data"
+      ]
+    },
+    {
+      "id": "SENS-006",
+      "name": "Environment or credential store dump",
+      "description": "Detects dumping environment variables (env, printenv) and pulling tokens out of credential helpers: macOS keychain (security), gh, aws, gcloud, az, 1Password, Vault, kubectl secrets.",
+      "enabled": true,
+      "severity": "medium",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
+          "metadata.command": {
+            "regex": "/proc/(?:self|\\d+)/environ|(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:(?:env|printenv|export\\s+-p)\\s*(?=$|[|;&>\\n])|printenv\\s+\\w*(?:KEY|TOKEN|SECRET|PASS)\\w*|security\\s+(?:find-(?:generic|internet)-password|dump-keychain)|gh\\s+auth\\s+token|aws\\s+(?:configure\\s+(?:get|export-credentials)|sts\\s+get-session-token)|gcloud\\s+auth\\s+(?:application-default\\s+)?print-access-token|az\\s+account\\s+get-access-token|op\\s+(?:read|item\\s+get)|vault\\s+(?:kv\\s+get|read)|kubectl\\s+get\\s+secrets?\\b[^;&|\\n]*-o\\s*(?:yaml|json))"
+          }
+        }
+      },
+      "tags": [
+        "credentials",
+        "secrets",
+        "environment"
+      ]
+    },
+    {
+      "id": "EXFIL-003",
+      "name": "Credential sent over the network",
+      "description": "Detects a real credential format (AWS keys, GitHub/GitLab/Slack/Google/OpenAI/Anthropic tokens, private key headers) in an outgoing command or fetched URL.",
+      "enabled": true,
+      "severity": "critical",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access",
+              "web_fetch"
+            ]
+          },
+          "metadata": {
+            "any_match": [
+              {
+                "command": {
+                  "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:curl|wget|http|https|nc|ncat|ssh|scp)\\b[^\\n]*?(?:(?:AKIA|ASIA)[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\\w{40,}|sk-ant-[\\w-]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{32,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[\\w-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
+                }
+              },
+              {
+                "url": {
+                  "regex": "(?:(?:AKIA|ASIA)[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\\w{40,}|sk-ant-[\\w-]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{32,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[\\w-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "tags": [
+        "exfiltration",
+        "credentials",
+        "secrets"
+      ]
+    },
+    {
+      "id": "EXFIL-004",
+      "name": "Credential passed to an MCP tool",
+      "description": "Detects a real credential format in the arguments of an MCP tool call, which may send it to a third-party server.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": "mcp_tool_use",
+          "metadata": {
+            "any_match": [
+              {
+                "input": {
+                  "regex": "(?:(?:AKIA|ASIA)[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\\w{40,}|sk-ant-[\\w-]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{32,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[\\w-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "tags": [
+        "exfiltration",
+        "credentials",
+        "mcp"
+      ]
+    },
+    {
+      "id": "DESTR-001",
+      "name": "Destructive command",
+      "description": "Detects commands that destroy data or history: rm -rf on /, ~, $HOME, * or ., force pushes, git reset --hard, git clean -f, dropping or truncating database tables, dd onto a device, mkfs and disk erase.",
+      "enabled": true,
+      "severity": "high",
+      "action": "alert",
+      "conditions": {
+        "type": "pattern",
+        "event": {
+          "category": {
+            "any_of": [
+              "bash_command",
+              "network_access"
+            ]
+          },
+          "metadata.command": {
+            "regex": "(?:^|[\\n;&`]|(?<=\\s)\\||\\|(?=\\s)|(?<![^\\s$])\\()\\s*(?:(?:sudo|exec|nohup|time|command)\\s+(?:-\\S+\\s+)*|env\\s+(?:\\w+=\\S*\\s+)*)?(?:rm\\s+(?:-[a-zA-Z-]+\\s+)*-[a-zA-Z]*(?:r[a-zA-Z]*f|f[a-zA-Z]*r)[a-zA-Z]*\\s+(?:-[a-zA-Z-]+\\s+)*['\\\"]?(?:/|~/?|\\$HOME/?|\\$\\{HOME\\}/?|\\*|\\.\\.?/?)\\*?['\\\"]?(?=$|[\\s;&|)])|rm\\b[^;&|\\n]*--no-preserve-root|git\\s+push\\b[^;&|\\n]*\\s(?:--force(?!-with-lease)\\b|-f\\b|\\+[\\w/-]+)|git\\s+reset\\s+--hard\\b|git\\s+clean\\s+-[a-zA-Z]*f|(?:psql|mysql|sqlite3|mongo\\w*)\\b[^\\n]*(?i:\\bdrop\\s+(?:table|database|schema)\\b|\\btruncate\\s+table\\b|\\bdelete\\s+from\\s+\\w+\\s*(?:;|\\\"|'|$))|dd\\s[^;&|\\n]*\\bof=/dev/(?!null\\b)|mkfs(?:\\.\\w+)?\\s|diskutil\\s+(?:erase\\w*|zeroDisk|secureErase))"
+          }
+        }
+      },
+      "tags": [
+        "destructive",
+        "data-loss"
+      ]
     }
   ],
   "rule_categories": {
@@ -440,10 +674,6 @@
       "name": "Privilege",
       "description": "Rules detecting privilege escalation and system modification attempts"
     },
-    "SCOPE": {
-      "name": "Scope",
-      "description": "Rules detecting operations outside permitted boundaries"
-    },
     "ENUM": {
       "name": "Enumeration",
       "description": "Rules detecting reconnaissance and scanning activities"
@@ -451,6 +681,14 @@
     "EVASION": {
       "name": "Evasion",
       "description": "Rules detecting attempts to bypass security controls using encoding, obfuscation, or alternative tools"
+    },
+    "TAMPER": {
+      "name": "Tampering",
+      "description": "Rules detecting changes to agent configuration, hooks and monitoring"
+    },
+    "DESTR": {
+      "name": "Destructive",
+      "description": "Rules detecting commands that destroy data, history or disks"
     }
   },
   "severity_levels": {

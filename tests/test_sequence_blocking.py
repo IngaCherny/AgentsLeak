@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -17,14 +18,23 @@ from agentsleak.engine.sequence import (
     get_default_sequence_rules,
     load_trusted_domains,
 )
+from agentsleak.models.alerts import PolicyAction
 from agentsleak.models.events import EventCategory
 
 from .conftest import make_engine, make_event, make_mock_database
 
 
+def _blocking_rules() -> list:
+    """Default rules with SEQ-EXEC-001 set to block (it only alerts by default)."""
+    return [
+        replace(r, action=PolicyAction.BLOCK) if r.id == "SEQ-EXEC-001" else r
+        for r in get_default_sequence_rules()
+    ]
+
+
 def _tracker() -> SequenceTracker:
     t = SequenceTracker()
-    t.load_rules(get_default_sequence_rules())
+    t.load_rules(_blocking_rules())
     return t
 
 
@@ -126,7 +136,7 @@ class TestTrustedDomainConfig:
     def test_configured_domain_exempts_from_blocking(self):
         """A tracker told to trust a custom domain won't block downloads from it."""
         t = SequenceTracker(trusted_domains=DEFAULT_TRUSTED_DOMAINS | {"mirror.corp"})
-        t.load_rules(get_default_sequence_rules())
+        t.load_rules(_blocking_rules())
         sid = "cfg"
         t0 = datetime.utcnow()
         t.track_event(uuid4(), sid, t0, _download("https://mirror.corp/pkg/x.py"))
@@ -138,6 +148,15 @@ class TestTrustedDomainConfig:
 # Tracker-level blocking check
 # --------------------------------------------------------------------------- #
 class TestSequenceBlockingCheck:
+    def test_default_rules_alert_but_never_block(self):
+        t = SequenceTracker()
+        t.load_rules(get_default_sequence_rules())
+        assert all(r.action != PolicyAction.BLOCK for r in get_default_sequence_rules())
+        sid = "default"
+        t0 = datetime.utcnow()
+        t.track_event(uuid4(), sid, t0, _download("https://tmpfiles.org/12/hello.py"))
+        assert t.check_blocking(uuid4(), sid, t0 + timedelta(seconds=5), _execute()) is None
+
     def test_unknown_download_then_execute_blocks(self):
         t = _tracker()
         sid = "s1"

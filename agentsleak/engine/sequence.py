@@ -522,37 +522,55 @@ def get_default_sequence_rules() -> list[SequenceRule]:
             id="SEQ-EXEC-001",
             name="Download from unknown domain and execute",
             description=(
-                "Blocks when a file is fetched from an untrusted domain — via "
-                "WebFetch or curl/wget — and then executed (bash, python, "
-                "chmod +x) within the time window. Downloads from trusted "
-                "software sources (PyPI, GitHub, npm, …) are exempt."
+                "Alerts when a file is downloaded from an untrusted domain — "
+                "curl/wget saving to disk, or a script/binary URL — and then "
+                "executed (bash, python, chmod +x, ./file) within the time "
+                "window. Downloads from trusted software sources (PyPI, "
+                "GitHub, npm, …) are exempt."
             ),
             steps=[
                 SequenceStep(
                     label="Download from an unknown domain",
-                    # Any fetch — a WebFetch (network_access) or a shell
-                    # curl/wget (command_exec) — whose host is not trusted.
+                    # A fetch whose host is not trusted and that brings back a
+                    # file: curl/wget saving to disk, or a URL of a script or
+                    # binary. Reading a web page (docs, articles) doesn't count.
                     categories=["command_exec", "network_access"],
+                    any_field_patterns={
+                        "tool_input.command": (
+                            r"\bcurl\b[^;&|\n]*\s(?:-[a-zA-Z]*[oO]\b|--output\b|--remote-name\b|>\s*[^\s&/])"
+                            r"|\bwget\b"
+                        ),
+                        "tool_input.url": (
+                            r"\.(?:sh|bash|zsh|py|pl|rb|js|mjs|php|ps1|bin|exe|elf|jar|deb|rpm|pkg|dmg|appimage)(?:[?#]|$)"
+                        ),
+                    },
                     unknown_domain=True,
                 ),
                 SequenceStep(
                     label="Execute the downloaded file",
                     categories=["command_exec"],
                     field_patterns={
-                        "commands": r"(bash|sh|zsh|python[23]?|perl|ruby|node|chmod\s+\+x)\s+\S",
+                        # An interpreter at the start of a command, running a
+                        # file (not `python3 - <<EOF` or `python -c "..."`), or
+                        # chmod +x / ./file. A filename ending in .sh is not.
+                        "tool_input.command": (
+                            r"(?:^|[\n;&|(`])\s*(?:sudo\s+)?(?:\S*/)?(?:bash|sh|zsh|python[23]?|perl|ruby|node)"
+                            r"(?!\s+-[ce]\b)(?!\s+-(?:\s|$))\s+(?:-[\w-]+\s+)*['\"]?[^\s<'\"-]"
+                            r"|\bchmod\s+(?:[ugoa]*\+x|[0-7]*[1357][0-7]{0,2})\s|(?:^|[\n;&|(`])\s*\./\S"
+                        ),
                     },
                 ),
             ],
             time_window_seconds=120,
             ordered=True,
-            action=PolicyAction.BLOCK,
+            action=PolicyAction.ALERT,
             severity=Severity.CRITICAL,
-            alert_title="Blocked: download from unknown domain then execute",
+            alert_title="Download from unknown domain then execute",
             alert_description=(
                 "A file was fetched from an untrusted domain and then executed — "
-                "a common malware-deployment pattern. Blocked at the execute step."
+                "a common malware-deployment pattern."
             ),
-            tags=["download-execute", "sequence", "malware", "blocking"],
+            tags=["download-execute", "sequence", "malware"],
         ),
         SequenceRule(
             id="SEQ-RECON-001",

@@ -26,6 +26,7 @@ CATEGORY_MAP: dict[str, EventCategory] = {
     "file_delete": EventCategory.FILE_DELETE,
     "network_access": EventCategory.NETWORK_ACCESS,
     "command_exec": EventCategory.COMMAND_EXEC,
+    "mcp_tool_use": EventCategory.MCP_TOOL_USE,
 }
 
 SEVERITY_MAP: dict[str, Severity] = {
@@ -42,8 +43,18 @@ ACTION_MAP: dict[str, PolicyAction] = {
     "log": PolicyAction.LOG,
 }
 
-# Rules to skip — they require runtime context or threshold logic not supported by simple policies
-SKIP_RULES = {"SCOPE-001", "ENUM-001"}
+# Rules removed from default_rules.json. Seeded copies are deleted from existing
+# databases on startup (save_policy only upserts, it never removes).
+RETIRED_RULES = ("EXEC-001", "EXFIL-001", "SCOPE-001", "ENUM-001")
+
+_SESSION_001_NAME = "[SESSION-001] Dangerous skip permissions mode"
+
+
+def _alert_description(rule: dict) -> str:
+    """Alert text: the rule's block_message ("Blocked: ...") only if it blocks."""
+    if rule.get("action") == "block" and rule.get("block_message"):
+        return rule["block_message"]
+    return rule.get("description", "")
 
 
 def _resolve_categories(category_spec: str | dict) -> list[EventCategory]:
@@ -100,8 +111,9 @@ def _translate_pattern_rule(rule: dict) -> Policy | None:
         for match_item in metadata_spec["any_match"]:
             for field_name, field_spec in match_item.items():
                 if isinstance(field_spec, dict) and "regex" in field_spec:
-                    # Map JSON field names to tool_input fields
-                    tool_field = f"tool_input.{field_name}"
+                    # Map JSON field names to tool_input fields; "input" is the
+                    # whole tool input (e.g. an MCP tool's arguments).
+                    tool_field = "tool_input" if field_name == "input" else f"tool_input.{field_name}"
                     conditions.append(RuleCondition(
                         field=tool_field,
                         operator=ConditionOperator.MATCHES,
@@ -123,64 +135,25 @@ def _translate_pattern_rule(rule: dict) -> Policy | None:
         action=ACTION_MAP.get(rule.get("action", "alert"), PolicyAction.ALERT),
         severity=SEVERITY_MAP.get(rule.get("severity", "medium"), Severity.MEDIUM),
         alert_title=rule.get("name", "Policy Violation"),
-        alert_description=rule.get("block_message", rule.get("description", "")),
+        alert_description=_alert_description(rule),
         tags=rule.get("tags", []),
     )
 
 
-def _translate_sequence_rule(rule: dict) -> Policy | None:
-    """Translate a sequence-type JSON rule into a simplified single-step Policy.
+def _delete_stale_policies(db: Database, rules: list[dict]) -> None:
+    """Remove seeded copies of retired rules, and old-name copies of renamed ones.
 
-    Sequence rules are reduced to a single pattern that catches the most
-    dangerous step in the sequence.
+    Policies are upserted by name, so a renamed rule would otherwise leave its
+    old-name copy behind, still active with the old conditions.
     """
-    rule_id = rule["id"]
-
-    if rule_id == "EXFIL-001":
-        # Data exfiltration: sensitive file read + network access
-        # Simplify to: curl/wget POST with sensitive file references
-        return Policy(
-            name=f"[{rule_id}] {rule['name']}",
-            description=rule.get("description", ""),
-            enabled=rule.get("enabled", True),
-            categories=[EventCategory.COMMAND_EXEC],
-            conditions=[RuleCondition(
-                field="tool_input.command",
-                operator=ConditionOperator.MATCHES,
-                value=r"(curl|wget|fetch)\s+.*(\.(env|pem|key)|credentials|secrets|password|api_key|\.ssh/id_)",
-                case_sensitive=True,
-            )],
-            condition_logic="all",
-            action=PolicyAction.BLOCK,
-            severity=Severity.CRITICAL,
-            alert_title=rule.get("name", "Data exfiltration pattern"),
-            alert_description=rule.get("block_message", rule.get("description", "")),
-            tags=rule.get("tags", []),
-        )
-
-    if rule_id == "EXEC-001":
-        # Download and execute: simplify to pipe-to-shell pattern
-        return Policy(
-            name=f"[{rule_id}] {rule['name']}",
-            description=rule.get("description", ""),
-            enabled=rule.get("enabled", True),
-            categories=[EventCategory.COMMAND_EXEC],
-            conditions=[RuleCondition(
-                field="tool_input.command",
-                operator=ConditionOperator.MATCHES,
-                value=r"(curl|wget)\s+.*\|\s*(bash|sh|python|perl|ruby)",
-                case_sensitive=True,
-            )],
-            condition_logic="all",
-            action=PolicyAction.BLOCK,
-            severity=Severity.CRITICAL,
-            alert_title=rule.get("name", "Download and execute"),
-            alert_description=rule.get("block_message", rule.get("description", "")),
-            tags=rule.get("tags", []),
-        )
-
-    logger.warning(f"Rule {rule_id}: unhandled sequence rule, skipping")
-    return None
+    current = {f"[{r['id']}] {r['name']}" for r in rules if r.get("id") and r.get("name")}
+    current.add(_SESSION_001_NAME)
+    ids = {r.get("id") for r in rules} | set(RETIRED_RULES) | {"SESSION-001"}
+    prefixes = tuple(f"[{rule_id}] " for rule_id in ids if rule_id)
+    for policy in db.get_all_policies():
+        if policy.name.startswith(prefixes) and policy.name not in current:
+            db.delete_policy(policy.id)
+            logger.info(f"Removed stale default policy: {policy.name}")
 
 
 def seed_default_policies(db: Database) -> int:
@@ -202,23 +175,17 @@ def seed_default_policies(db: Database) -> int:
     rules = rules_data.get("rules", [])
     count = 0
 
+    _delete_stale_policies(db, rules)
+
     for rule in rules:
         rule_id = rule.get("id", "")
 
-        if rule_id in SKIP_RULES:
-            logger.debug(f"Skipping rule {rule_id} (not supported as simple policy)")
-            continue
-
         condition_type = rule.get("conditions", {}).get("type")
-
-        policy: Policy | None = None
-        if condition_type == "pattern":
-            policy = _translate_pattern_rule(rule)
-        elif condition_type == "sequence":
-            policy = _translate_sequence_rule(rule)
-        else:
+        if condition_type != "pattern":
             logger.debug(f"Skipping rule {rule_id}: unsupported condition type '{condition_type}'")
             continue
+
+        policy = _translate_pattern_rule(rule)
 
         if policy is None:
             continue
@@ -233,7 +200,7 @@ def seed_default_policies(db: Database) -> int:
     # ── Built-in policies that use raw_payload fields ──────────────────────
     builtin_policies = [
         Policy(
-            name="[SESSION-001] Dangerous skip permissions mode",
+            name=_SESSION_001_NAME,
             description=(
                 "Alerts when a Claude Code session starts with permissions bypassed "
                 "(--dangerously-skip-permissions). Sessions running without permission "
