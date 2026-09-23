@@ -57,13 +57,24 @@ echo -e "${BLUE}                    AgentsLeak — Runtime Security for AI Agent
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo
 
-# Check Python version
+# Find Python 3.11+ (macOS's /usr/bin/python3 is 3.9, so try versioned names first)
 echo -e "${YELLOW}Checking Python...${NC}"
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}Python 3 is required but not installed.${NC}"
+python_ok() {
+    "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null
+}
+PYTHON=""
+for candidate in ${AGENTSLEAK_PYTHON:-} python3.13 python3.12 python3.11 python3; do
+    if command -v "$candidate" &> /dev/null && python_ok "$candidate"; then
+        PYTHON="$(command -v "$candidate")"
+        break
+    fi
+done
+if [ -z "$PYTHON" ]; then
+    echo -e "${RED}Python 3.11 or newer is required (found: $(python3 --version 2>&1 || echo none)).${NC}"
+    echo -e "Install it (macOS: ${BLUE}brew install python@3.12${NC}) or point to one with AGENTSLEAK_PYTHON=/path/to/python3"
     exit 1
 fi
-python3 --version
+"$PYTHON" --version
 
 # Node.js is only needed for dashboard development (or if the prebuilt
 # dashboard is missing from this checkout).
@@ -86,15 +97,35 @@ echo
 
 # Set up Python virtual environment
 echo -e "${YELLOW}Setting up Python virtual environment...${NC}"
+# Recreate a venv that is broken (e.g. the repo folder was moved) or too old.
+if [ -d ".venv" ] && ! python_ok .venv/bin/python; then
+    echo -e "${YELLOW}Existing .venv is broken or older than Python 3.11 — recreating it${NC}"
+    rm -rf .venv
+fi
 if [ ! -d ".venv" ]; then
-    python3 -m venv .venv
+    "$PYTHON" -m venv .venv
     echo -e "${GREEN}✓ Virtual environment created${NC}"
 fi
 source .venv/bin/activate
 
-# Install Python dependencies
+# Install Python dependencies as prebuilt wheels only — nothing is compiled and
+# AgentsLeak itself isn't built; it runs straight from this folder.
+# An up-to-date pip is needed to recognise current wheel tags (e.g. macOS arm64).
 echo -e "${YELLOW}Installing Python dependencies...${NC}"
-pip install -e . --quiet
+python -m pip install --quiet --upgrade pip
+DEPS=()
+while IFS= read -r dep; do DEPS+=("$dep"); done < <(python -c '
+import tomllib
+with open("pyproject.toml", "rb") as f:
+    print("\n".join(tomllib.load(f)["project"]["dependencies"]))
+')
+if ! python -m pip install --quiet --only-binary=:all: "${DEPS[@]}"; then
+    echo -e "${RED}Some dependencies have no prebuilt wheel for this Python/platform:${NC}"
+    python -c 'import platform, sys; print(f"  Python {sys.version.split()[0]} on {platform.system()} {platform.machine()}")'
+    echo -e "Try a different Python version, e.g. ${BLUE}AGENTSLEAK_PYTHON=python3.12 ./scripts/start.sh${NC}"
+    echo -e "(delete .venv first so it is recreated with that Python)"
+    exit 1
+fi
 
 # Install dashboard dependencies (dev mode only)
 if [ "$DEV_MODE" = true ]; then
