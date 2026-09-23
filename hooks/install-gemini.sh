@@ -1,22 +1,31 @@
 #!/bin/bash
 # =============================================================================
-# AgentsLeak - Installer Script
+# AgentsLeak - Gemini CLI Installer Script
 # =============================================================================
-# Installs AgentsLeak hooks into Claude Code.
+# Installs AgentsLeak hooks into Gemini CLI.
 #
 # What this script does:
-# 1. Detects Claude Code settings file location
-# 2. Backs up existing settings
-# 3. Copies hook scripts to ~/.agentsleak/hooks/
-# 4. Merges hook configurations into Claude Code settings
-# 5. Makes all scripts executable
+# 1. Checks dependencies (jq, curl)
+# 2. Creates ~/.agentsleak/hooks/ directories (reuses existing)
+# 3. Copies common.sh + gemini-hook.sh to ~/.agentsleak/hooks/
+# 4. Backs up existing settings.json if present
+# 5. Merges hook configuration into Gemini CLI's settings.json
+# 6. Creates ~/.agentsleak/config.env if not exists
+#
+# Gemini CLI's hooks config lives in settings.json (same "hooks" object shape
+# as Claude Code's own settings.json), so this installer mirrors install.sh's
+# merge approach rather than install-cursor.sh's flat hooks.json approach.
+#
+# NOTE: built from Gemini CLI's published hooks docs (geminicli.com/docs/hooks),
+# not verified against a live install. Check the merged settings.json against
+# your installed Gemini CLI version if hooks don't fire as expected.
 #
 # Usage:
-#   ./install.sh [--unattended] [--project]
+#   ./install-gemini.sh [--unattended] [--project]
 #
 # Options:
 #   --unattended    Skip confirmation prompts
-#   --project       Install to .claude/settings.json in cwd instead of global —
+#   --project       Install to .gemini/settings.json in cwd instead of global —
 #                    scopes monitoring to sessions started in this folder only
 # =============================================================================
 
@@ -31,7 +40,7 @@ INSTALL_DIR="${HOME}/.agentsleak"
 HOOKS_DIR="${INSTALL_DIR}/hooks"
 
 # Default to global install
-CLAUDE_SETTINGS_DIR="${HOME}/.claude"
+GEMINI_SETTINGS_DIR="${HOME}/.gemini"
 PROJECT_MODE=false
 BACKUP_DIR="${INSTALL_DIR}/backups"
 
@@ -126,19 +135,19 @@ create_directories() {
 
     mkdir -p "$HOOKS_DIR"
     mkdir -p "$BACKUP_DIR"
-    mkdir -p "$CLAUDE_SETTINGS_DIR"
+    mkdir -p "$GEMINI_SETTINGS_DIR"
 
     success "Directories created"
 }
 
 backup_settings() {
-    if [[ -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        local backup_file="${BACKUP_DIR}/settings.json.$(date +%Y%m%d_%H%M%S).bak"
-        info "Backing up existing Claude Code settings to ${backup_file}..."
-        cp "$CLAUDE_SETTINGS_FILE" "$backup_file"
+    if [[ -f "$GEMINI_SETTINGS_FILE" ]]; then
+        local backup_file="${BACKUP_DIR}/gemini-settings.json.$(date +%Y%m%d_%H%M%S).bak"
+        info "Backing up existing Gemini CLI settings to ${backup_file}..."
+        cp "$GEMINI_SETTINGS_FILE" "$backup_file"
         success "Settings backed up"
     else
-        info "No existing Claude Code settings found (will create new)"
+        info "No existing Gemini CLI settings found (will create new)"
     fi
 }
 
@@ -148,20 +157,10 @@ copy_hook_scripts() {
 
     info "Copying hook scripts to ${HOOKS_DIR}..."
 
-    # List of scripts to copy
+    # Scripts needed for Gemini CLI support
     local scripts=(
         "common.sh"
-        "pre-tool-use.sh"
-        "post-tool-use.sh"
-        "post-tool-use-error.sh"
-        "pre-compact.sh"
-        "session-start.sh"
-        "session-end.sh"
-        "subagent-start.sh"
-        "subagent-stop.sh"
-        "permission-request.sh"
-        "user-prompt-submit.sh"
-        "cursor-hook.sh"
+        "gemini-hook.sh"
     )
 
     for script in "${scripts[@]}"; do
@@ -180,167 +179,55 @@ copy_hook_scripts() {
     success "Hook scripts installed"
 }
 
-configure_claude_code() {
-    info "Configuring Claude Code hooks..."
+configure_gemini() {
+    info "Configuring Gemini CLI hooks..."
 
     # Create default settings if file doesn't exist
-    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        echo '{}' > "$CLAUDE_SETTINGS_FILE"
+    if [[ ! -f "$GEMINI_SETTINGS_FILE" ]]; then
+        echo '{}' > "$GEMINI_SETTINGS_FILE"
     fi
 
     # Validate existing JSON
-    if ! jq empty "$CLAUDE_SETTINGS_FILE" 2>/dev/null; then
+    if ! jq empty "$GEMINI_SETTINGS_FILE" 2>/dev/null; then
         error "Existing settings.json is not valid JSON"
-        error "Please fix or remove ${CLAUDE_SETTINGS_FILE} and try again"
+        error "Please fix or remove ${GEMINI_SETTINGS_FILE} and try again"
         exit 1
     fi
 
-    # Hook configuration to merge
+    local hook_cmd="${HOOKS_DIR}/gemini-hook.sh"
+
+    # Hook configuration to merge — one adapter script handles every event.
     local hook_config
-    hook_config=$(cat <<EOF
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/pre-tool-use.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/post-tool-use.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/post-tool-use-error.sh"
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/pre-compact.sh"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/session-start.sh"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/session-end.sh"
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/subagent-start.sh"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/subagent-stop.sh"
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/permission-request.sh"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/user-prompt-submit.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-EOF
-)
+    hook_config=$(jq -n --arg cmd "$hook_cmd" '{
+        hooks: {
+            SessionStart: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
+            SessionEnd: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
+            BeforeTool: [{ matcher: ".*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
+            AfterTool: [{ matcher: ".*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
+            BeforeAgent: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
+            PreCompress: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }],
+            Notification: [{ matcher: "*", hooks: [{ type: "command", command: $cmd, name: "agentsleak" }] }]
+        }
+    }')
 
-    # Merge hook configuration into existing settings. For each event, keep the
-    # user's own hooks, drop previous AgentsLeak entries (so re-running doesn't
-    # duplicate them), then append ours. A plain `*` merge would replace the
-    # event arrays and delete the user's hooks.
+    # Merge hook configuration into existing settings, preserving anything else
     local merged
-    merged=$(jq -s '
-        .[0] as $old | .[1].hooks as $new
-        | $old + {hooks: (reduce ($new | keys[]) as $event (($old.hooks // {});
-            .[$event] = (
-                (.[$event] // [])
-                | map(.hooks |= map(select((.command // "") | contains(".agentsleak") | not)))
-                | map(select(.hooks | length > 0))
-            ) + $new[$event]
-        ))}
-    ' "$CLAUDE_SETTINGS_FILE" <(echo "$hook_config"))
+    merged=$(jq -s '.[0] * .[1]' "$GEMINI_SETTINGS_FILE" <(echo "$hook_config"))
 
-    # Write the merged configuration atomically
     local tmpfile
-    tmpfile=$(mktemp "${CLAUDE_SETTINGS_FILE}.XXXXXX")
-    echo "$merged" | jq '.' > "$tmpfile" && mv "$tmpfile" "$CLAUDE_SETTINGS_FILE"
+    tmpfile=$(mktemp "${GEMINI_SETTINGS_FILE}.XXXXXX")
+    echo "$merged" | jq '.' > "$tmpfile" && mv "$tmpfile" "$GEMINI_SETTINGS_FILE"
 
-    success "Claude Code hooks configured"
+    success "Gemini CLI hooks configured: ${GEMINI_SETTINGS_FILE}"
 }
 
 create_config_file() {
     local config_file="${INSTALL_DIR}/config.env"
+
+    if [[ -f "$config_file" ]]; then
+        info "Configuration file already exists: ${config_file}"
+        return 0
+    fi
 
     info "Creating AgentsLeak configuration file..."
 
@@ -366,12 +253,12 @@ EOF
 print_success_message() {
     echo ""
     echo "============================================================"
-    echo -e "${GREEN}AgentsLeak v${AGENTSLEAK_VERSION} installed successfully!${NC}"
+    echo -e "${GREEN}AgentsLeak v${AGENTSLEAK_VERSION} installed for Gemini CLI!${NC}"
     echo "============================================================"
     echo ""
     echo "Installation Summary:"
-    echo "  - Hooks installed to: ${HOOKS_DIR}"
-    echo "  - Claude Code settings: ${CLAUDE_SETTINGS_FILE}"
+    echo "  - Hook scripts: ${HOOKS_DIR}"
+    echo "  - Gemini CLI settings: ${GEMINI_SETTINGS_FILE}"
     echo "  - Configuration: ${INSTALL_DIR}/config.env"
     echo "  - Backups: ${BACKUP_DIR}"
     echo ""
@@ -380,11 +267,11 @@ print_success_message() {
     echo "     agentsleak"
     echo ""
     if [[ "$PROJECT_MODE" == "true" ]]; then
-        echo "  2. Start using Claude Code in $(pwd) - only sessions started"
-        echo "     in this folder will be monitored and logged."
+        echo "  2. Use Gemini CLI in $(pwd) - only sessions started in this"
+        echo "     folder will be monitored and logged."
     else
-        echo "  2. Start using Claude Code normally - all tool usage will"
-        echo "     be monitored and logged."
+        echo "  2. Use Gemini CLI normally - all tool usage will be"
+        echo "     monitored and logged."
     fi
     echo ""
     echo "  3. View logs and alerts in the AgentsLeak dashboard:"
@@ -395,8 +282,7 @@ print_success_message() {
     echo "  Or set environment variables: AGENTSLEAK_HOST, AGENTSLEAK_PORT"
     echo ""
     echo "To uninstall:"
-    echo "  ${HOOKS_DIR}/../uninstall.sh"
-    echo "  # or manually: Remove 'hooks' section from ${CLAUDE_SETTINGS_FILE}"
+    echo "  ./uninstall-gemini.sh"
     echo ""
 }
 
@@ -415,18 +301,16 @@ main() {
                 ;;
             --project)
                 PROJECT_MODE=true
-                CLAUDE_SETTINGS_DIR="$(pwd)/.claude"
+                GEMINI_SETTINGS_DIR="$(pwd)/.gemini"
                 ;;
             --help|-h)
                 echo "Usage: $0 [--unattended] [--project]"
                 echo ""
-                echo "Install AgentsLeak hooks for Claude Code."
+                echo "Install AgentsLeak hooks for Gemini CLI."
                 echo ""
                 echo "Options:"
                 echo "  --unattended    Skip confirmation prompts"
-                echo "  --project       Install to .claude/settings.json in current directory"
-                echo "                  instead of the global ~/.claude/settings.json — scopes"
-                echo "                  monitoring to sessions started in this folder only"
+                echo "  --project       Install to .gemini/settings.json in current directory"
                 echo "  --help, -h      Show this help message"
                 exit 0
                 ;;
@@ -436,30 +320,26 @@ main() {
         esac
     done
 
-    CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_DIR}/settings.json"
+    GEMINI_SETTINGS_FILE="${GEMINI_SETTINGS_DIR}/settings.json"
 
     echo ""
     echo "============================================================"
-    echo "  AgentsLeak Installer v${AGENTSLEAK_VERSION}"
+    echo "  AgentsLeak Gemini CLI Installer v${AGENTSLEAK_VERSION}"
     echo "  AI Agent Security Monitoring"
     echo "============================================================"
     echo ""
 
     if [[ "$PROJECT_MODE" == "true" ]]; then
-        info "Project mode: installing to $(pwd)/.claude/settings.json"
+        info "Project mode: installing to $(pwd)/.gemini/settings.json"
     else
-        info "Global mode: installing to ~/.claude/settings.json"
+        info "Global mode: installing to ~/.gemini/settings.json"
     fi
     echo ""
 
     # Confirmation prompt
     if [[ "$unattended" != "true" ]]; then
-        if [[ "$PROJECT_MODE" == "true" ]]; then
-            echo "This will install AgentsLeak hooks into Claude Code, scoped to this project."
-        else
-            echo "This will install AgentsLeak hooks into Claude Code."
-        fi
-        echo "Your existing Claude Code settings will be backed up."
+        echo "This will install AgentsLeak hooks into Gemini CLI."
+        echo "Your existing Gemini CLI settings will be backed up."
         echo ""
         read -p "Continue with installation? [y/N] " -n 1 -r
         echo ""
@@ -475,7 +355,7 @@ main() {
     create_directories
     backup_settings
     copy_hook_scripts
-    configure_claude_code
+    configure_gemini
     create_config_file
     print_success_message
 }

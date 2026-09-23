@@ -1,21 +1,21 @@
 #!/bin/bash
 # =============================================================================
-# AgentsLeak - Uninstaller Script
+# AgentsLeak - Gemini CLI Uninstaller Script
 # =============================================================================
-# Removes AgentsLeak hooks from Claude Code.
+# Removes AgentsLeak hooks from Gemini CLI.
 #
 # What this script does:
-# 1. Removes hook configuration from Claude Code settings
+# 1. Removes hook configuration from Gemini CLI settings
 # 2. Optionally removes ~/.agentsleak/ directory
 #
 # Usage:
-#   ./uninstall.sh [--full] [--unattended] [--project]
+#   ./uninstall-gemini.sh [--full] [--unattended] [--project]
 #
 # Options:
 #   --full          Also remove ~/.agentsleak/ directory and all data
 #   --unattended    Skip confirmation prompts
-#   --project       Target .claude/settings.json in current directory
-#                    instead of the global ~/.claude/settings.json
+#   --project       Target .gemini/settings.json in current directory
+#                    instead of the global ~/.gemini/settings.json
 # =============================================================================
 
 set -euo pipefail
@@ -26,7 +26,7 @@ set -euo pipefail
 
 INSTALL_DIR="${HOME}/.agentsleak"
 HOOKS_DIR="${INSTALL_DIR}/hooks"
-CLAUDE_SETTINGS_DIR="${HOME}/.claude"
+GEMINI_SETTINGS_DIR="${HOME}/.gemini"
 PROJECT_MODE=false
 BACKUP_DIR="${INSTALL_DIR}/backups"
 
@@ -79,20 +79,20 @@ command_exists() {
 # -----------------------------------------------------------------------------
 
 backup_settings() {
-    if [[ -f "$CLAUDE_SETTINGS_FILE" ]]; then
+    if [[ -f "$GEMINI_SETTINGS_FILE" ]]; then
         mkdir -p "$BACKUP_DIR"
-        local backup_file="${BACKUP_DIR}/settings.json.$(date +%Y%m%d_%H%M%S).pre-uninstall.bak"
-        info "Backing up current Claude Code settings..."
-        cp "$CLAUDE_SETTINGS_FILE" "$backup_file"
+        local backup_file="${BACKUP_DIR}/gemini-settings.json.$(date +%Y%m%d_%H%M%S).pre-uninstall.bak"
+        info "Backing up current Gemini CLI settings..."
+        cp "$GEMINI_SETTINGS_FILE" "$backup_file"
         success "Settings backed up to ${backup_file}"
     fi
 }
 
 remove_hooks_from_settings() {
-    info "Removing AgentsLeak hooks from Claude Code settings..."
+    info "Removing AgentsLeak hooks from Gemini CLI settings..."
 
-    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        info "No Claude Code settings file found - nothing to remove"
+    if [[ ! -f "$GEMINI_SETTINGS_FILE" ]]; then
+        info "No Gemini CLI settings file found - nothing to remove"
         return 0
     fi
 
@@ -100,41 +100,40 @@ remove_hooks_from_settings() {
         error "jq is required to modify settings. Please remove hooks manually."
         echo ""
         echo "Manual removal instructions:"
-        echo "  1. Open ${CLAUDE_SETTINGS_FILE}"
+        echo "  1. Open ${GEMINI_SETTINGS_FILE}"
         echo "  2. Remove the 'hooks' section containing AgentsLeak paths"
         echo "  3. Save the file"
         return 1
     fi
 
     # Check if settings file is valid JSON
-    if ! jq empty "$CLAUDE_SETTINGS_FILE" 2>/dev/null; then
+    if ! jq empty "$GEMINI_SETTINGS_FILE" 2>/dev/null; then
         error "Settings file is not valid JSON"
         return 1
     fi
 
     # Check if hooks exist in settings
-    if ! jq -e '.hooks' "$CLAUDE_SETTINGS_FILE" >/dev/null 2>&1; then
-        info "No hooks found in Claude Code settings - nothing to remove"
+    if ! jq -e '.hooks' "$GEMINI_SETTINGS_FILE" >/dev/null 2>&1; then
+        info "No hooks found in Gemini CLI settings - nothing to remove"
         return 0
     fi
 
     # Remove the hooks section entirely
     # Note: This removes ALL hooks, not just AgentsLeak hooks
-    # A more surgical approach would filter by path, but this is simpler
     local updated
-    updated=$(jq 'del(.hooks)' "$CLAUDE_SETTINGS_FILE")
+    updated=$(jq 'del(.hooks)' "$GEMINI_SETTINGS_FILE")
 
-    echo "$updated" | jq '.' > "$CLAUDE_SETTINGS_FILE"
+    echo "$updated" | jq '.' > "$GEMINI_SETTINGS_FILE"
 
-    success "Hooks removed from Claude Code settings"
+    success "Hooks removed from Gemini CLI settings"
 }
 
 remove_hooks_selective() {
     # More selective removal - only removes hooks pointing to AgentsLeak
-    info "Selectively removing AgentsLeak hooks from Claude Code settings..."
+    info "Selectively removing AgentsLeak hooks from Gemini CLI settings..."
 
-    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        info "No Claude Code settings file found - nothing to remove"
+    if [[ ! -f "$GEMINI_SETTINGS_FILE" ]]; then
+        info "No Gemini CLI settings file found - nothing to remove"
         return 0
     fi
 
@@ -162,9 +161,9 @@ remove_hooks_selective() {
         else
             .
         end
-    ' "$CLAUDE_SETTINGS_FILE")
+    ' "$GEMINI_SETTINGS_FILE")
 
-    echo "$updated" | jq '.' > "$CLAUDE_SETTINGS_FILE"
+    echo "$updated" | jq '.' > "$GEMINI_SETTINGS_FILE"
 
     success "AgentsLeak hooks selectively removed"
 }
@@ -188,7 +187,7 @@ print_success_message() {
     echo "============================================================"
     echo ""
     echo "What was removed:"
-    echo "  - AgentsLeak hooks from Claude Code settings"
+    echo "  - AgentsLeak hooks from Gemini CLI settings"
 
     if [[ "$full_removal" == "true" ]]; then
         echo "  - Installation directory: ${INSTALL_DIR}"
@@ -206,8 +205,8 @@ print_success_message() {
     fi
 
     echo ""
-    echo "Claude Code will no longer send events to AgentsLeak."
-    echo "Restart Claude Code for changes to take effect."
+    echo "Gemini CLI will no longer send events to AgentsLeak."
+    echo "Restart Gemini CLI for changes to take effect."
     echo ""
 }
 
@@ -235,17 +234,17 @@ main() {
                 ;;
             --project)
                 PROJECT_MODE=true
-                CLAUDE_SETTINGS_DIR="$(pwd)/.claude"
+                GEMINI_SETTINGS_DIR="$(pwd)/.gemini"
                 ;;
             --help|-h)
                 echo "Usage: $0 [--full] [--unattended] [--project]"
                 echo ""
-                echo "Uninstall AgentsLeak hooks from Claude Code."
+                echo "Uninstall AgentsLeak hooks from Gemini CLI."
                 echo ""
                 echo "Options:"
                 echo "  --full          Also remove ~/.agentsleak/ directory and all data"
                 echo "  --unattended    Skip confirmation prompts"
-                echo "  --project       Target .claude/settings.json in current directory"
+                echo "  --project       Target .gemini/settings.json in current directory"
                 echo "  --help, -h      Show this help message"
                 exit 0
                 ;;
@@ -255,17 +254,17 @@ main() {
         esac
     done
 
-    CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_DIR}/settings.json"
+    GEMINI_SETTINGS_FILE="${GEMINI_SETTINGS_DIR}/settings.json"
 
     echo ""
     echo "============================================================"
-    echo "  AgentsLeak Uninstaller"
+    echo "  AgentsLeak Gemini CLI Uninstaller"
     echo "============================================================"
     echo ""
 
     # Confirmation prompt
     if [[ "$unattended" != "true" ]]; then
-        echo "This will remove AgentsLeak hooks from Claude Code."
+        echo "This will remove AgentsLeak hooks from Gemini CLI."
         if [[ "$full_removal" == "true" ]]; then
             echo -e "${YELLOW}WARNING: --full flag specified - this will also remove${NC}"
             echo -e "${YELLOW}all AgentsLeak files including backups and logs.${NC}"
@@ -283,7 +282,7 @@ main() {
     # Backup before making changes
     backup_settings
 
-    # Remove hooks from Claude Code settings
+    # Remove hooks from Gemini CLI settings
     if [[ "$selective" == "true" ]]; then
         remove_hooks_selective
     else

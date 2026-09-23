@@ -16,6 +16,7 @@ import { useDarkMode } from '@/lib/useDarkMode';
 import { useStats, useTimeline, useSessions, useTopFiles, useTopCommands, useTopDomains, useEndpointStats } from '@/api/queries';
 import EventsOverTime from '@/components/charts/EventsOverTime';
 import { StatTile } from '@/components/common/StatTile';
+import { sourceLabel } from '@/components/sessions/SessionCard';
 
 type TimeRange = '1h' | '24h' | '7d' | '30d';
 
@@ -286,6 +287,9 @@ export default function Analytics() {
               <option value="all">All Sources</option>
               <option value="claude_code">Claude Code</option>
               <option value="cursor">Cursor</option>
+              <option value="gemini">Gemini CLI</option>
+              <option value="codex">Codex CLI</option>
+              <option value="windsurf">Windsurf</option>
             </select>
             {sourceFilter !== 'all' && (
               <button
@@ -821,9 +825,12 @@ export default function Analytics() {
             const SOURCE_COLORS: Record<string, { light: string; dark: string }> = {
               claude_code: { light: '#1A1A1A', dark: '#ececec' },
               cursor: { light: '#888888', dark: '#777777' },
+              gemini: { light: '#4D4D4D', dark: '#B0B0B0' },
+              codex: { light: '#2E2E2E', dark: '#D4D4D4' },
+              windsurf: { light: '#6B6B6B', dark: '#8F8F8F' },
             };
             const maxCount = entries.length > 0 ? entries[0][1] : 1;
-            const formatSource = (s: string) => s === 'cursor' ? 'Cursor' : 'Claude Code';
+            const formatSource = sourceLabel;
 
             return (
               <div className="space-y-2">

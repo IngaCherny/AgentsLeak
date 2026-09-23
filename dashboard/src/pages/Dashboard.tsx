@@ -25,7 +25,7 @@ import { useStats, useSessions, useEvents, useEndpointStats } from '@/api/querie
 import { SessionStatus } from '@/api/types';
 import type { Event, Session } from '@/api/types';
 import { ExpandableText } from '@/components/common/ExpandableText';
-import { SourceBadge } from '@/components/sessions/SessionCard';
+import { SourceBadge, sourceLabel } from '@/components/sessions/SessionCard';
 
 // ── Event grouping ────────────────────────────────────────────────────
 
@@ -917,6 +917,9 @@ export default function Dashboard() {
               const SOURCE_COLORS: Record<string, { light: string; dark: string }> = {
                 claude_code: { light: '#1A1A1A', dark: '#ececec' },
                 cursor: { light: '#888888', dark: '#777777' },
+                gemini: { light: '#4D4D4D', dark: '#B0B0B0' },
+                codex: { light: '#2E2E2E', dark: '#D4D4D4' },
+                windsurf: { light: '#6B6B6B', dark: '#8F8F8F' },
               };
               const maxCount = entries.length > 0 ? entries[0][1] : 1;
 
@@ -933,7 +936,7 @@ export default function Dashboard() {
                 return seg;
               });
 
-              const formatSource = (s: string) => s === 'cursor' ? 'Cursor' : 'Claude Code';
+              const formatSource = sourceLabel;
 
               return (
                 <div className="flex items-center gap-6">

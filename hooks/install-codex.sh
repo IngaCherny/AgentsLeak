@@ -1,22 +1,34 @@
 #!/bin/bash
 # =============================================================================
-# AgentsLeak - Installer Script
+# AgentsLeak - Codex CLI Installer Script
 # =============================================================================
-# Installs AgentsLeak hooks into Claude Code.
+# Installs AgentsLeak hooks into Codex CLI.
 #
 # What this script does:
-# 1. Detects Claude Code settings file location
-# 2. Backs up existing settings
-# 3. Copies hook scripts to ~/.agentsleak/hooks/
-# 4. Merges hook configurations into Claude Code settings
-# 5. Makes all scripts executable
+# 1. Checks dependencies (jq, curl)
+# 2. Creates ~/.agentsleak/hooks/ directories (reuses existing)
+# 3. Copies common.sh + codex-hook.sh to ~/.agentsleak/hooks/
+# 4. Backs up existing hooks.json if present
+# 5. Merges hook configuration into Codex CLI's hooks.json
+# 6. Creates ~/.agentsleak/config.env if not exists
+#
+# Codex CLI's hook config schema (matcher + hooks[] with type/command, under a
+# top-level "hooks" key) is close to byte-identical to Claude Code's own, so
+# this installer mirrors install.sh's merge approach.
+#
+# NOTE: built from Codex CLI's published hooks docs (developers.openai.com/codex/hooks),
+# not verified against a live install. Codex requires reviewing/trusting a hook
+# definition before it first runs — approve it via the `/hooks` command inside
+# Codex CLI after installing (or pass --dangerously-bypass-hook-trust to codex
+# for unattended automation, which is unrelated to this script's own
+# --unattended flag).
 #
 # Usage:
-#   ./install.sh [--unattended] [--project]
+#   ./install-codex.sh [--unattended] [--project]
 #
 # Options:
 #   --unattended    Skip confirmation prompts
-#   --project       Install to .claude/settings.json in cwd instead of global —
+#   --project       Install to .codex/hooks.json in cwd instead of global —
 #                    scopes monitoring to sessions started in this folder only
 # =============================================================================
 
@@ -31,7 +43,7 @@ INSTALL_DIR="${HOME}/.agentsleak"
 HOOKS_DIR="${INSTALL_DIR}/hooks"
 
 # Default to global install
-CLAUDE_SETTINGS_DIR="${HOME}/.claude"
+CODEX_SETTINGS_DIR="${HOME}/.codex"
 PROJECT_MODE=false
 BACKUP_DIR="${INSTALL_DIR}/backups"
 
@@ -126,19 +138,19 @@ create_directories() {
 
     mkdir -p "$HOOKS_DIR"
     mkdir -p "$BACKUP_DIR"
-    mkdir -p "$CLAUDE_SETTINGS_DIR"
+    mkdir -p "$CODEX_SETTINGS_DIR"
 
     success "Directories created"
 }
 
 backup_settings() {
-    if [[ -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        local backup_file="${BACKUP_DIR}/settings.json.$(date +%Y%m%d_%H%M%S).bak"
-        info "Backing up existing Claude Code settings to ${backup_file}..."
-        cp "$CLAUDE_SETTINGS_FILE" "$backup_file"
+    if [[ -f "$CODEX_SETTINGS_FILE" ]]; then
+        local backup_file="${BACKUP_DIR}/codex-hooks.json.$(date +%Y%m%d_%H%M%S).bak"
+        info "Backing up existing Codex CLI hooks.json to ${backup_file}..."
+        cp "$CODEX_SETTINGS_FILE" "$backup_file"
         success "Settings backed up"
     else
-        info "No existing Claude Code settings found (will create new)"
+        info "No existing Codex CLI hooks.json found (will create new)"
     fi
 }
 
@@ -148,20 +160,10 @@ copy_hook_scripts() {
 
     info "Copying hook scripts to ${HOOKS_DIR}..."
 
-    # List of scripts to copy
+    # Scripts needed for Codex CLI support
     local scripts=(
         "common.sh"
-        "pre-tool-use.sh"
-        "post-tool-use.sh"
-        "post-tool-use-error.sh"
-        "pre-compact.sh"
-        "session-start.sh"
-        "session-end.sh"
-        "subagent-start.sh"
-        "subagent-stop.sh"
-        "permission-request.sh"
-        "user-prompt-submit.sh"
-        "cursor-hook.sh"
+        "codex-hook.sh"
     )
 
     for script in "${scripts[@]}"; do
@@ -180,167 +182,57 @@ copy_hook_scripts() {
     success "Hook scripts installed"
 }
 
-configure_claude_code() {
-    info "Configuring Claude Code hooks..."
+configure_codex() {
+    info "Configuring Codex CLI hooks..."
 
     # Create default settings if file doesn't exist
-    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        echo '{}' > "$CLAUDE_SETTINGS_FILE"
+    if [[ ! -f "$CODEX_SETTINGS_FILE" ]]; then
+        echo '{}' > "$CODEX_SETTINGS_FILE"
     fi
 
     # Validate existing JSON
-    if ! jq empty "$CLAUDE_SETTINGS_FILE" 2>/dev/null; then
-        error "Existing settings.json is not valid JSON"
-        error "Please fix or remove ${CLAUDE_SETTINGS_FILE} and try again"
+    if ! jq empty "$CODEX_SETTINGS_FILE" 2>/dev/null; then
+        error "Existing hooks.json is not valid JSON"
+        error "Please fix or remove ${CODEX_SETTINGS_FILE} and try again"
         exit 1
     fi
 
-    # Hook configuration to merge
+    local hook_cmd="${HOOKS_DIR}/codex-hook.sh"
+
+    # Hook configuration to merge — one adapter script handles every event.
     local hook_config
-    hook_config=$(cat <<EOF
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/pre-tool-use.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/post-tool-use.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/post-tool-use-error.sh"
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/pre-compact.sh"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/session-start.sh"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/session-end.sh"
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/subagent-start.sh"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/subagent-stop.sh"
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/permission-request.sh"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${HOOKS_DIR}/user-prompt-submit.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-EOF
-)
+    hook_config=$(jq -n --arg cmd "$hook_cmd" '{
+        hooks: {
+            SessionStart: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
+            SessionEnd: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
+            PreToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: $cmd }] }],
+            PostToolUse: [{ matcher: ".*", hooks: [{ type: "command", command: $cmd }] }],
+            PermissionRequest: [{ matcher: ".*", hooks: [{ type: "command", command: $cmd }] }],
+            PreCompact: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
+            UserPromptSubmit: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
+            SubagentStart: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }],
+            SubagentStop: [{ matcher: "", hooks: [{ type: "command", command: $cmd }] }]
+        }
+    }')
 
-    # Merge hook configuration into existing settings. For each event, keep the
-    # user's own hooks, drop previous AgentsLeak entries (so re-running doesn't
-    # duplicate them), then append ours. A plain `*` merge would replace the
-    # event arrays and delete the user's hooks.
+    # Merge hook configuration into existing settings, preserving anything else
     local merged
-    merged=$(jq -s '
-        .[0] as $old | .[1].hooks as $new
-        | $old + {hooks: (reduce ($new | keys[]) as $event (($old.hooks // {});
-            .[$event] = (
-                (.[$event] // [])
-                | map(.hooks |= map(select((.command // "") | contains(".agentsleak") | not)))
-                | map(select(.hooks | length > 0))
-            ) + $new[$event]
-        ))}
-    ' "$CLAUDE_SETTINGS_FILE" <(echo "$hook_config"))
+    merged=$(jq -s '.[0] * .[1]' "$CODEX_SETTINGS_FILE" <(echo "$hook_config"))
 
-    # Write the merged configuration atomically
     local tmpfile
-    tmpfile=$(mktemp "${CLAUDE_SETTINGS_FILE}.XXXXXX")
-    echo "$merged" | jq '.' > "$tmpfile" && mv "$tmpfile" "$CLAUDE_SETTINGS_FILE"
+    tmpfile=$(mktemp "${CODEX_SETTINGS_FILE}.XXXXXX")
+    echo "$merged" | jq '.' > "$tmpfile" && mv "$tmpfile" "$CODEX_SETTINGS_FILE"
 
-    success "Claude Code hooks configured"
+    success "Codex CLI hooks configured: ${CODEX_SETTINGS_FILE}"
 }
 
 create_config_file() {
     local config_file="${INSTALL_DIR}/config.env"
+
+    if [[ -f "$config_file" ]]; then
+        info "Configuration file already exists: ${config_file}"
+        return 0
+    fi
 
     info "Creating AgentsLeak configuration file..."
 
@@ -366,12 +258,12 @@ EOF
 print_success_message() {
     echo ""
     echo "============================================================"
-    echo -e "${GREEN}AgentsLeak v${AGENTSLEAK_VERSION} installed successfully!${NC}"
+    echo -e "${GREEN}AgentsLeak v${AGENTSLEAK_VERSION} installed for Codex CLI!${NC}"
     echo "============================================================"
     echo ""
     echo "Installation Summary:"
-    echo "  - Hooks installed to: ${HOOKS_DIR}"
-    echo "  - Claude Code settings: ${CLAUDE_SETTINGS_FILE}"
+    echo "  - Hook scripts: ${HOOKS_DIR}"
+    echo "  - Codex CLI hooks: ${CODEX_SETTINGS_FILE}"
     echo "  - Configuration: ${INSTALL_DIR}/config.env"
     echo "  - Backups: ${BACKUP_DIR}"
     echo ""
@@ -379,15 +271,19 @@ print_success_message() {
     echo "  1. Start the AgentsLeak server:"
     echo "     agentsleak"
     echo ""
+    echo "  2. Run Codex CLI and approve the AgentsLeak hooks when prompted"
+    echo "     (Codex reviews/trusts new hook definitions on first run —"
+    echo "     use the /hooks command inside Codex to review them anytime)."
+    echo ""
     if [[ "$PROJECT_MODE" == "true" ]]; then
-        echo "  2. Start using Claude Code in $(pwd) - only sessions started"
-        echo "     in this folder will be monitored and logged."
+        echo "  3. Use Codex CLI in $(pwd) - only sessions started in this"
+        echo "     folder will be monitored and logged."
     else
-        echo "  2. Start using Claude Code normally - all tool usage will"
-        echo "     be monitored and logged."
+        echo "  3. Use Codex CLI normally - all tool usage will be"
+        echo "     monitored and logged."
     fi
     echo ""
-    echo "  3. View logs and alerts in the AgentsLeak dashboard:"
+    echo "  4. View logs and alerts in the AgentsLeak dashboard:"
     echo "     http://localhost:3827"
     echo ""
     echo "Configuration:"
@@ -395,8 +291,7 @@ print_success_message() {
     echo "  Or set environment variables: AGENTSLEAK_HOST, AGENTSLEAK_PORT"
     echo ""
     echo "To uninstall:"
-    echo "  ${HOOKS_DIR}/../uninstall.sh"
-    echo "  # or manually: Remove 'hooks' section from ${CLAUDE_SETTINGS_FILE}"
+    echo "  ./uninstall-codex.sh"
     echo ""
 }
 
@@ -415,18 +310,16 @@ main() {
                 ;;
             --project)
                 PROJECT_MODE=true
-                CLAUDE_SETTINGS_DIR="$(pwd)/.claude"
+                CODEX_SETTINGS_DIR="$(pwd)/.codex"
                 ;;
             --help|-h)
                 echo "Usage: $0 [--unattended] [--project]"
                 echo ""
-                echo "Install AgentsLeak hooks for Claude Code."
+                echo "Install AgentsLeak hooks for Codex CLI."
                 echo ""
                 echo "Options:"
                 echo "  --unattended    Skip confirmation prompts"
-                echo "  --project       Install to .claude/settings.json in current directory"
-                echo "                  instead of the global ~/.claude/settings.json — scopes"
-                echo "                  monitoring to sessions started in this folder only"
+                echo "  --project       Install to .codex/hooks.json in current directory"
                 echo "  --help, -h      Show this help message"
                 exit 0
                 ;;
@@ -436,30 +329,26 @@ main() {
         esac
     done
 
-    CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_DIR}/settings.json"
+    CODEX_SETTINGS_FILE="${CODEX_SETTINGS_DIR}/hooks.json"
 
     echo ""
     echo "============================================================"
-    echo "  AgentsLeak Installer v${AGENTSLEAK_VERSION}"
+    echo "  AgentsLeak Codex CLI Installer v${AGENTSLEAK_VERSION}"
     echo "  AI Agent Security Monitoring"
     echo "============================================================"
     echo ""
 
     if [[ "$PROJECT_MODE" == "true" ]]; then
-        info "Project mode: installing to $(pwd)/.claude/settings.json"
+        info "Project mode: installing to $(pwd)/.codex/hooks.json"
     else
-        info "Global mode: installing to ~/.claude/settings.json"
+        info "Global mode: installing to ~/.codex/hooks.json"
     fi
     echo ""
 
     # Confirmation prompt
     if [[ "$unattended" != "true" ]]; then
-        if [[ "$PROJECT_MODE" == "true" ]]; then
-            echo "This will install AgentsLeak hooks into Claude Code, scoped to this project."
-        else
-            echo "This will install AgentsLeak hooks into Claude Code."
-        fi
-        echo "Your existing Claude Code settings will be backed up."
+        echo "This will install AgentsLeak hooks into Codex CLI."
+        echo "Your existing Codex CLI hooks.json will be backed up."
         echo ""
         read -p "Continue with installation? [y/N] " -n 1 -r
         echo ""
@@ -475,7 +364,7 @@ main() {
     create_directories
     backup_settings
     copy_hook_scripts
-    configure_claude_code
+    configure_codex
     create_config_file
     print_success_message
 }

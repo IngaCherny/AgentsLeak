@@ -17,9 +17,33 @@ interface SessionCardProps {
   showRiskScore?: boolean;
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  claude_code: 'Claude Code',
+  cursor: 'Cursor',
+  gemini: 'Gemini CLI',
+  codex: 'Codex CLI',
+  windsurf: 'Windsurf',
+};
+
+const SOURCE_SHORT_LABELS: Record<string, string> = {
+  claude_code: 'CC',
+  cursor: 'Cursor',
+  gemini: 'Gemini',
+  codex: 'Codex',
+  windsurf: 'Windsurf',
+};
+
+function sourceLabel(source?: string | null): string {
+  return (source && SOURCE_LABELS[source]) || 'Claude Code';
+}
+
+function sourceShortLabel(source?: string | null): string {
+  return (source && SOURCE_SHORT_LABELS[source]) || 'CC';
+}
+
 function SourceBadge({ source }: { source?: string | null }) {
-  const label = source === 'cursor' ? 'Cursor' : 'Claude Code';
-  const styles = source === 'cursor'
+  const label = sourceLabel(source);
+  const styles = source && source !== 'claude_code'
     ? 'bg-carbon/[0.08] text-carbon/70 dark:bg-white/[0.08] dark:text-white/60'
     : 'bg-carbon/[0.05] text-carbon/50 dark:bg-white/[0.05] dark:text-white/40';
   return (
@@ -29,7 +53,7 @@ function SourceBadge({ source }: { source?: string | null }) {
   );
 }
 
-export { SourceBadge };
+export { SourceBadge, sourceLabel, sourceShortLabel };
 
 const statusStyles: Record<string, { bg: string; text: string; border: string; label: string }> = {
   active: {

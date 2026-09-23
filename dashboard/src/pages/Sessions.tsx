@@ -153,6 +153,9 @@ export default function Sessions() {
               <option value="all">All Sources</option>
               <option value="claude_code">Claude Code</option>
               <option value="cursor">Cursor</option>
+              <option value="gemini">Gemini CLI</option>
+              <option value="codex">Codex CLI</option>
+              <option value="windsurf">Windsurf</option>
             </select>
             {sourceFilter !== 'all' && (
               <button

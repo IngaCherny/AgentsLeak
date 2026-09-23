@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Terminal, AlertTriangle, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { sourceShortLabel } from '@/components/sessions/SessionCard';
 
 export interface SessionNodeData {
   sessionId: string;
@@ -59,7 +60,7 @@ function SessionNode({ data, selected }: NodeProps<SessionNodeData>) {
       {/* Source label */}
       {data.sessionSource && (
         <div className="text-[7px] font-mono text-white/50 mt-0.5">
-          {data.sessionSource === 'cursor' ? 'Cursor' : 'CC'}
+          {sourceShortLabel(data.sessionSource)}
         </div>
       )}
 

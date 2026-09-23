@@ -1,21 +1,21 @@
 #!/bin/bash
 # =============================================================================
-# AgentsLeak - Uninstaller Script
+# AgentsLeak - Windsurf (Cascade) Uninstaller Script
 # =============================================================================
-# Removes AgentsLeak hooks from Claude Code.
+# Removes AgentsLeak hooks from Windsurf.
 #
 # What this script does:
-# 1. Removes hook configuration from Claude Code settings
-# 2. Optionally removes ~/.agentsleak/ directory
+# 1. Backs up ~/.codeium/windsurf/hooks.json
+# 2. Selectively removes AgentsLeak hook entries
+# 3. Optionally removes ~/.agentsleak/ directory (--full)
 #
 # Usage:
-#   ./uninstall.sh [--full] [--unattended] [--project]
+#   ./uninstall-windsurf.sh [--full] [--unattended] [--project]
 #
 # Options:
 #   --full          Also remove ~/.agentsleak/ directory and all data
 #   --unattended    Skip confirmation prompts
-#   --project       Target .claude/settings.json in current directory
-#                    instead of the global ~/.claude/settings.json
+#   --project       Target .windsurf/hooks.json in current directory
 # =============================================================================
 
 set -euo pipefail
@@ -25,10 +25,11 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 
 INSTALL_DIR="${HOME}/.agentsleak"
-HOOKS_DIR="${INSTALL_DIR}/hooks"
-CLAUDE_SETTINGS_DIR="${HOME}/.claude"
-PROJECT_MODE=false
 BACKUP_DIR="${INSTALL_DIR}/backups"
+
+# Default to global
+WINDSURF_DIR="${HOME}/.codeium/windsurf"
+PROJECT_MODE=false
 
 # Colors for output (if terminal supports it)
 if [[ -t 1 ]]; then
@@ -78,95 +79,67 @@ command_exists() {
 # Uninstallation Functions
 # -----------------------------------------------------------------------------
 
-backup_settings() {
-    if [[ -f "$CLAUDE_SETTINGS_FILE" ]]; then
+backup_windsurf_hooks() {
+    local hooks_file="${WINDSURF_DIR}/hooks.json"
+
+    if [[ -f "$hooks_file" ]]; then
         mkdir -p "$BACKUP_DIR"
-        local backup_file="${BACKUP_DIR}/settings.json.$(date +%Y%m%d_%H%M%S).pre-uninstall.bak"
-        info "Backing up current Claude Code settings..."
-        cp "$CLAUDE_SETTINGS_FILE" "$backup_file"
-        success "Settings backed up to ${backup_file}"
+        local backup_file="${BACKUP_DIR}/windsurf-hooks.json.$(date +%Y%m%d_%H%M%S).pre-uninstall.bak"
+        info "Backing up current Windsurf hooks..."
+        cp "$hooks_file" "$backup_file"
+        success "Windsurf hooks backed up to ${backup_file}"
     fi
 }
 
-remove_hooks_from_settings() {
-    info "Removing AgentsLeak hooks from Claude Code settings..."
+remove_hooks_selective() {
+    local hooks_file="${WINDSURF_DIR}/hooks.json"
 
-    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        info "No Claude Code settings file found - nothing to remove"
+    info "Selectively removing AgentsLeak hooks from Windsurf..."
+
+    if [[ ! -f "$hooks_file" ]]; then
+        info "No Windsurf hooks file found - nothing to remove"
         return 0
     fi
 
     if ! command_exists jq; then
-        error "jq is required to modify settings. Please remove hooks manually."
+        error "jq is required to modify hooks.json. Please remove hooks manually."
         echo ""
         echo "Manual removal instructions:"
-        echo "  1. Open ${CLAUDE_SETTINGS_FILE}"
-        echo "  2. Remove the 'hooks' section containing AgentsLeak paths"
+        echo "  1. Open ${hooks_file}"
+        echo "  2. Remove entries with commands pointing to .agentsleak"
         echo "  3. Save the file"
         return 1
     fi
 
-    # Check if settings file is valid JSON
-    if ! jq empty "$CLAUDE_SETTINGS_FILE" 2>/dev/null; then
-        error "Settings file is not valid JSON"
+    if ! jq empty "$hooks_file" 2>/dev/null; then
+        error "hooks.json is not valid JSON"
         return 1
     fi
 
-    # Check if hooks exist in settings
-    if ! jq -e '.hooks' "$CLAUDE_SETTINGS_FILE" >/dev/null 2>&1; then
-        info "No hooks found in Claude Code settings - nothing to remove"
-        return 0
-    fi
-
-    # Remove the hooks section entirely
-    # Note: This removes ALL hooks, not just AgentsLeak hooks
-    # A more surgical approach would filter by path, but this is simpler
-    local updated
-    updated=$(jq 'del(.hooks)' "$CLAUDE_SETTINGS_FILE")
-
-    echo "$updated" | jq '.' > "$CLAUDE_SETTINGS_FILE"
-
-    success "Hooks removed from Claude Code settings"
-}
-
-remove_hooks_selective() {
-    # More selective removal - only removes hooks pointing to AgentsLeak
-    info "Selectively removing AgentsLeak hooks from Claude Code settings..."
-
-    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        info "No Claude Code settings file found - nothing to remove"
-        return 0
-    fi
-
-    if ! command_exists jq; then
-        warn "jq not available, falling back to full hooks removal"
-        remove_hooks_from_settings
-        return $?
-    fi
-
-    # Remove hooks that contain ".agentsleak" in their command
+    # Remove hook entries whose command contains ".agentsleak"
     local updated
     updated=$(jq '
         if .hooks then
             .hooks |= with_entries(
-                .value |= (
-                    map(.hooks |= map(select(.command | contains(".agentsleak") | not)))
-                    | map(select(.hooks | length > 0))
-                )
+                .value |= map(select(.command | contains(".agentsleak") | not))
             ) |
-            if .hooks | to_entries | map(select(.value | length > 0)) | length == 0 then
-                del(.hooks)
-            else
-                .
-            end
+            .hooks |= with_entries(select(.value | length > 0)) |
+            if (.hooks | length) == 0 then del(.hooks) else . end
         else
             .
         end
-    ' "$CLAUDE_SETTINGS_FILE")
+    ' "$hooks_file")
 
-    echo "$updated" | jq '.' > "$CLAUDE_SETTINGS_FILE"
+    local remaining_keys
+    remaining_keys=$(echo "$updated" | jq 'keys | length' 2>/dev/null || echo "0")
 
-    success "AgentsLeak hooks selectively removed"
+    if [[ "$remaining_keys" -eq 0 ]]; then
+        rm -f "$hooks_file"
+        success "Windsurf hooks file removed (no non-AgentsLeak hooks remaining)"
+    else
+        echo "$updated" | jq '.' > "$hooks_file"
+        success "AgentsLeak hooks selectively removed from Windsurf"
+    fi
 }
 
 remove_install_directory() {
@@ -184,11 +157,11 @@ print_success_message() {
 
     echo ""
     echo "============================================================"
-    echo -e "${GREEN}AgentsLeak uninstalled successfully!${NC}"
+    echo -e "${GREEN}AgentsLeak uninstalled from Windsurf!${NC}"
     echo "============================================================"
     echo ""
     echo "What was removed:"
-    echo "  - AgentsLeak hooks from Claude Code settings"
+    echo "  - AgentsLeak hooks from Windsurf configuration"
 
     if [[ "$full_removal" == "true" ]]; then
         echo "  - Installation directory: ${INSTALL_DIR}"
@@ -206,8 +179,8 @@ print_success_message() {
     fi
 
     echo ""
-    echo "Claude Code will no longer send events to AgentsLeak."
-    echo "Restart Claude Code for changes to take effect."
+    echo "Windsurf will no longer send events to AgentsLeak."
+    echo "Restart Windsurf for changes to take effect."
     echo ""
 }
 
@@ -218,7 +191,6 @@ print_success_message() {
 main() {
     local full_removal=false
     local unattended=false
-    local selective=true
 
     # Parse arguments
     for arg in "$@"; do
@@ -229,23 +201,19 @@ main() {
             --unattended)
                 unattended=true
                 ;;
-            --all-hooks)
-                # Hidden flag to remove ALL hooks, not just AgentsLeak
-                selective=false
-                ;;
             --project)
                 PROJECT_MODE=true
-                CLAUDE_SETTINGS_DIR="$(pwd)/.claude"
+                WINDSURF_DIR="$(pwd)/.windsurf"
                 ;;
             --help|-h)
                 echo "Usage: $0 [--full] [--unattended] [--project]"
                 echo ""
-                echo "Uninstall AgentsLeak hooks from Claude Code."
+                echo "Uninstall AgentsLeak hooks from Windsurf."
                 echo ""
                 echo "Options:"
                 echo "  --full          Also remove ~/.agentsleak/ directory and all data"
                 echo "  --unattended    Skip confirmation prompts"
-                echo "  --project       Target .claude/settings.json in current directory"
+                echo "  --project       Target .windsurf/hooks.json in current directory"
                 echo "  --help, -h      Show this help message"
                 exit 0
                 ;;
@@ -255,17 +223,19 @@ main() {
         esac
     done
 
-    CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_DIR}/settings.json"
+    echo ""
+    echo "============================================================"
+    echo "  AgentsLeak Windsurf Uninstaller"
+    echo "============================================================"
+    echo ""
 
-    echo ""
-    echo "============================================================"
-    echo "  AgentsLeak Uninstaller"
-    echo "============================================================"
-    echo ""
+    if [[ "$PROJECT_MODE" == "true" ]]; then
+        info "Project mode: targeting $(pwd)/.windsurf/hooks.json"
+    fi
 
     # Confirmation prompt
     if [[ "$unattended" != "true" ]]; then
-        echo "This will remove AgentsLeak hooks from Claude Code."
+        echo "This will remove AgentsLeak hooks from Windsurf."
         if [[ "$full_removal" == "true" ]]; then
             echo -e "${YELLOW}WARNING: --full flag specified - this will also remove${NC}"
             echo -e "${YELLOW}all AgentsLeak files including backups and logs.${NC}"
@@ -281,14 +251,10 @@ main() {
     fi
 
     # Backup before making changes
-    backup_settings
+    backup_windsurf_hooks
 
-    # Remove hooks from Claude Code settings
-    if [[ "$selective" == "true" ]]; then
-        remove_hooks_selective
-    else
-        remove_hooks_from_settings
-    fi
+    # Remove AgentsLeak hooks from Windsurf
+    remove_hooks_selective
 
     # Optionally remove installation directory
     if [[ "$full_removal" == "true" ]]; then

@@ -1,21 +1,21 @@
 #!/bin/bash
 # =============================================================================
-# AgentsLeak - Uninstaller Script
+# AgentsLeak - Codex CLI Uninstaller Script
 # =============================================================================
-# Removes AgentsLeak hooks from Claude Code.
+# Removes AgentsLeak hooks from Codex CLI.
 #
 # What this script does:
-# 1. Removes hook configuration from Claude Code settings
+# 1. Removes hook configuration from Codex CLI's hooks.json
 # 2. Optionally removes ~/.agentsleak/ directory
 #
 # Usage:
-#   ./uninstall.sh [--full] [--unattended] [--project]
+#   ./uninstall-codex.sh [--full] [--unattended] [--project]
 #
 # Options:
 #   --full          Also remove ~/.agentsleak/ directory and all data
 #   --unattended    Skip confirmation prompts
-#   --project       Target .claude/settings.json in current directory
-#                    instead of the global ~/.claude/settings.json
+#   --project       Target .codex/hooks.json in current directory
+#                    instead of the global ~/.codex/hooks.json
 # =============================================================================
 
 set -euo pipefail
@@ -26,7 +26,7 @@ set -euo pipefail
 
 INSTALL_DIR="${HOME}/.agentsleak"
 HOOKS_DIR="${INSTALL_DIR}/hooks"
-CLAUDE_SETTINGS_DIR="${HOME}/.claude"
+CODEX_SETTINGS_DIR="${HOME}/.codex"
 PROJECT_MODE=false
 BACKUP_DIR="${INSTALL_DIR}/backups"
 
@@ -79,20 +79,20 @@ command_exists() {
 # -----------------------------------------------------------------------------
 
 backup_settings() {
-    if [[ -f "$CLAUDE_SETTINGS_FILE" ]]; then
+    if [[ -f "$CODEX_SETTINGS_FILE" ]]; then
         mkdir -p "$BACKUP_DIR"
-        local backup_file="${BACKUP_DIR}/settings.json.$(date +%Y%m%d_%H%M%S).pre-uninstall.bak"
-        info "Backing up current Claude Code settings..."
-        cp "$CLAUDE_SETTINGS_FILE" "$backup_file"
+        local backup_file="${BACKUP_DIR}/codex-hooks.json.$(date +%Y%m%d_%H%M%S).pre-uninstall.bak"
+        info "Backing up current Codex CLI hooks.json..."
+        cp "$CODEX_SETTINGS_FILE" "$backup_file"
         success "Settings backed up to ${backup_file}"
     fi
 }
 
 remove_hooks_from_settings() {
-    info "Removing AgentsLeak hooks from Claude Code settings..."
+    info "Removing AgentsLeak hooks from Codex CLI hooks.json..."
 
-    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        info "No Claude Code settings file found - nothing to remove"
+    if [[ ! -f "$CODEX_SETTINGS_FILE" ]]; then
+        info "No Codex CLI hooks.json found - nothing to remove"
         return 0
     fi
 
@@ -100,41 +100,38 @@ remove_hooks_from_settings() {
         error "jq is required to modify settings. Please remove hooks manually."
         echo ""
         echo "Manual removal instructions:"
-        echo "  1. Open ${CLAUDE_SETTINGS_FILE}"
+        echo "  1. Open ${CODEX_SETTINGS_FILE}"
         echo "  2. Remove the 'hooks' section containing AgentsLeak paths"
         echo "  3. Save the file"
         return 1
     fi
 
-    # Check if settings file is valid JSON
-    if ! jq empty "$CLAUDE_SETTINGS_FILE" 2>/dev/null; then
+    if ! jq empty "$CODEX_SETTINGS_FILE" 2>/dev/null; then
         error "Settings file is not valid JSON"
         return 1
     fi
 
-    # Check if hooks exist in settings
-    if ! jq -e '.hooks' "$CLAUDE_SETTINGS_FILE" >/dev/null 2>&1; then
-        info "No hooks found in Claude Code settings - nothing to remove"
+    if ! jq -e '.hooks' "$CODEX_SETTINGS_FILE" >/dev/null 2>&1; then
+        info "No hooks found in Codex CLI hooks.json - nothing to remove"
         return 0
     fi
 
     # Remove the hooks section entirely
     # Note: This removes ALL hooks, not just AgentsLeak hooks
-    # A more surgical approach would filter by path, but this is simpler
     local updated
-    updated=$(jq 'del(.hooks)' "$CLAUDE_SETTINGS_FILE")
+    updated=$(jq 'del(.hooks)' "$CODEX_SETTINGS_FILE")
 
-    echo "$updated" | jq '.' > "$CLAUDE_SETTINGS_FILE"
+    echo "$updated" | jq '.' > "$CODEX_SETTINGS_FILE"
 
-    success "Hooks removed from Claude Code settings"
+    success "Hooks removed from Codex CLI hooks.json"
 }
 
 remove_hooks_selective() {
     # More selective removal - only removes hooks pointing to AgentsLeak
-    info "Selectively removing AgentsLeak hooks from Claude Code settings..."
+    info "Selectively removing AgentsLeak hooks from Codex CLI hooks.json..."
 
-    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        info "No Claude Code settings file found - nothing to remove"
+    if [[ ! -f "$CODEX_SETTINGS_FILE" ]]; then
+        info "No Codex CLI hooks.json found - nothing to remove"
         return 0
     fi
 
@@ -162,9 +159,9 @@ remove_hooks_selective() {
         else
             .
         end
-    ' "$CLAUDE_SETTINGS_FILE")
+    ' "$CODEX_SETTINGS_FILE")
 
-    echo "$updated" | jq '.' > "$CLAUDE_SETTINGS_FILE"
+    echo "$updated" | jq '.' > "$CODEX_SETTINGS_FILE"
 
     success "AgentsLeak hooks selectively removed"
 }
@@ -188,7 +185,7 @@ print_success_message() {
     echo "============================================================"
     echo ""
     echo "What was removed:"
-    echo "  - AgentsLeak hooks from Claude Code settings"
+    echo "  - AgentsLeak hooks from Codex CLI hooks.json"
 
     if [[ "$full_removal" == "true" ]]; then
         echo "  - Installation directory: ${INSTALL_DIR}"
@@ -206,8 +203,8 @@ print_success_message() {
     fi
 
     echo ""
-    echo "Claude Code will no longer send events to AgentsLeak."
-    echo "Restart Claude Code for changes to take effect."
+    echo "Codex CLI will no longer send events to AgentsLeak."
+    echo "Restart Codex CLI for changes to take effect."
     echo ""
 }
 
@@ -235,17 +232,17 @@ main() {
                 ;;
             --project)
                 PROJECT_MODE=true
-                CLAUDE_SETTINGS_DIR="$(pwd)/.claude"
+                CODEX_SETTINGS_DIR="$(pwd)/.codex"
                 ;;
             --help|-h)
                 echo "Usage: $0 [--full] [--unattended] [--project]"
                 echo ""
-                echo "Uninstall AgentsLeak hooks from Claude Code."
+                echo "Uninstall AgentsLeak hooks from Codex CLI."
                 echo ""
                 echo "Options:"
                 echo "  --full          Also remove ~/.agentsleak/ directory and all data"
                 echo "  --unattended    Skip confirmation prompts"
-                echo "  --project       Target .claude/settings.json in current directory"
+                echo "  --project       Target .codex/hooks.json in current directory"
                 echo "  --help, -h      Show this help message"
                 exit 0
                 ;;
@@ -255,17 +252,17 @@ main() {
         esac
     done
 
-    CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_DIR}/settings.json"
+    CODEX_SETTINGS_FILE="${CODEX_SETTINGS_DIR}/hooks.json"
 
     echo ""
     echo "============================================================"
-    echo "  AgentsLeak Uninstaller"
+    echo "  AgentsLeak Codex CLI Uninstaller"
     echo "============================================================"
     echo ""
 
     # Confirmation prompt
     if [[ "$unattended" != "true" ]]; then
-        echo "This will remove AgentsLeak hooks from Claude Code."
+        echo "This will remove AgentsLeak hooks from Codex CLI."
         if [[ "$full_removal" == "true" ]]; then
             echo -e "${YELLOW}WARNING: --full flag specified - this will also remove${NC}"
             echo -e "${YELLOW}all AgentsLeak files including backups and logs.${NC}"
@@ -283,7 +280,7 @@ main() {
     # Backup before making changes
     backup_settings
 
-    # Remove hooks from Claude Code settings
+    # Remove hooks from Codex CLI hooks.json
     if [[ "$selective" == "true" ]]; then
         remove_hooks_selective
     else
